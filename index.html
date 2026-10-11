@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FFF6EE">
+  <title>나의 생활 플래너</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <main id="app">
+
+    <!-- ========== 1. 오늘 ========== -->
+    <section class="screen" data-screen="today">
+      <header class="screen-header">
+        <p class="today-year" id="today-year"></p>
+        <h1 class="today-date" id="today-date"></h1>
+        <p class="today-sub">오늘도 한 걸음씩 🌷</p>
+      </header>
+
+      <div class="card">
+        <h2 class="card-title">⏰ 시간 일정</h2>
+        <ul class="task-list" id="list-timed"></ul>
+        <p class="empty" id="empty-timed">시간이 정해진 일정이 없어요</p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">✏️ 오늘 할 일</h2>
+        <ul class="task-list" id="list-untimed"></ul>
+        <p class="empty" id="empty-untimed">오늘 할 일이 없어요. + 버튼으로 추가해 보세요</p>
+      </div>
+
+      <div class="card card-done" id="done-card" hidden>
+        <button type="button" class="done-toggle" id="done-toggle" aria-expanded="false">
+          <span>✅ 완료한 일 <span id="done-count">0</span>개</span>
+          <span class="chevron" aria-hidden="true">▾</span>
+        </button>
+        <ul class="task-list" id="list-done" hidden></ul>
+      </div>
+    </section>
+
+    <!-- ========== 2. 전체 할 일 ========== -->
+    <section class="screen" data-screen="tasks" hidden>
+      <header class="screen-header">
+        <h1 class="screen-title">📋 전체 할 일</h1>
+      </header>
+      <div class="card placeholder">
+        <span class="placeholder-emoji">🧺</span>
+        3단계에서 만들 예정이에요
+      </div>
+    </section>
+
+    <!-- ========== 3. 달력 ========== -->
+    <section class="screen" data-screen="calendar" hidden>
+      <header class="screen-header">
+        <h1 class="screen-title">📅 달력</h1>
+      </header>
+      <div class="card placeholder">
+        <span class="placeholder-emoji">🗓️</span>
+        6단계에서 만들 예정이에요
+      </div>
+    </section>
+
+    <!-- ========== 4. 트래커 ========== -->
+    <section class="screen" data-screen="tracker" hidden>
+      <header class="screen-header">
+        <h1 class="screen-title">🌱 트래커</h1>
+      </header>
+      <div class="card placeholder">
+        <span class="placeholder-emoji">🪴</span>
+        7단계에서 만들 예정이에요
+      </div>
+    </section>
+
+    <!-- ========== 5. 리뷰 및 기록 ========== -->
+    <section class="screen" data-screen="review" hidden>
+      <header class="screen-header">
+        <h1 class="screen-title">📖 리뷰 및 기록</h1>
+      </header>
+      <div class="card placeholder">
+        <span class="placeholder-emoji">📚</span>
+        8단계에서 만들 예정이에요
+      </div>
+    </section>
+
+  </main>
+
+  <!-- '+' 버튼 (오늘 화면에서만 보임) -->
+  <button type="button" class="fab" id="fab-add" aria-label="할 일 추가">+</button>
+
+  <!-- 빠른 할 일 추가: 아래에서 올라오는 입력창 -->
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <form class="sheet" id="quick-add-sheet" autocomplete="off">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <label class="sheet-label" for="quick-add-input">오늘 할 일 추가</label>
+    <input type="text" id="quick-add-input" class="sheet-input"
+           placeholder="할 일을 입력하세요" maxlength="100" enterkeyhint="done">
+    <p class="sheet-note">※ 1단계 테스트용: 새로고침하면 사라져요 (2단계에서 저장 연결)</p>
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-ghost" id="quick-add-cancel">취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
+
+  <!-- 하단 메뉴 -->
+  <nav class="bottom-nav" aria-label="주요 화면">
+    <button type="button" class="nav-btn active" data-target="today" aria-current="page">
+      <span class="nav-icon">☀️</span><span class="nav-label">오늘</span>
+    </button>
+    <button type="button" class="nav-btn" data-target="tasks">
+      <span class="nav-icon">📋</span><span class="nav-label">전체 할 일</span>
+    </button>
+    <button type="button" class="nav-btn" data-target="calendar">
+      <span class="nav-icon">📅</span><span class="nav-label">달력</span>
+    </button>
+    <button type="button" class="nav-btn" data-target="tracker">
+      <span class="nav-icon">🌱</span><span class="nav-label">트래커</span>
+    </button>
+    <button type="button" class="nav-btn" data-target="review">
+      <span class="nav-icon">📖</span><span class="nav-label">기록</span>
+    </button>
+  </nav>
+
+  <script src="db.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

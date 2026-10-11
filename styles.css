@@ -1,0 +1,264 @@
+/* =========================================
+   나의 생활 플래너 - 아기자기한 플래너 스타일
+   ========================================= */
+
+/* ---------- 색상과 공통 값 ---------- */
+:root {
+  --bg: #FFF6EE;          /* 바탕: 따뜻한 크림색 */
+  --card: #FFFFFF;
+  --text: #4A3F3A;        /* 본문: 부드러운 갈색 */
+  --muted: #A0928A;       /* 흐린 글자 */
+  --line: #F1E4DA;        /* 구분선 */
+
+  --pink: #F4A3B5;
+  --pink-dark: #E4879B;
+  --pink-soft: #FDE8ED;
+  --mint-soft: #EAF6F0;
+
+  --radius: 20px;
+  --nav-h: 68px;
+  --shadow: 0 4px 14px rgba(180, 140, 120, 0.12);
+}
+
+/* ---------- 기본 초기화 ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+html, body { background: var(--bg); }
+
+body {
+  font-family: "Gowun Dodum", -apple-system, "Noto Sans KR", "Malgun Gothic", sans-serif;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, input { font: inherit; color: inherit; }
+
+/* ---------- 전체 레이아웃 ---------- */
+#app {
+  max-width: 560px;
+  margin: 0 auto;
+  /* 아래쪽은 하단 메뉴 + '+' 버튼에 가리지 않도록 여백 */
+  padding: 20px 16px calc(var(--nav-h) + 100px + env(safe-area-inset-bottom));
+}
+
+.screen-header { padding: 12px 4px 20px; }
+.screen-title { font-size: 1.5rem; }
+
+/* 오늘 날짜 */
+.today-year { color: var(--muted); font-size: 0.9rem; }
+.today-date { font-size: 1.75rem; }
+.today-sub  { color: var(--muted); font-size: 0.95rem; margin-top: 2px; }
+
+/* ---------- 카드 ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.card-title { font-size: 1.05rem; margin-bottom: 8px; }
+
+.empty { color: var(--muted); font-size: 0.92rem; padding: 4px 0; }
+
+.placeholder {
+  text-align: center;
+  color: var(--muted);
+  padding: 36px 18px;
+}
+.placeholder-emoji { display: block; font-size: 2.4rem; margin-bottom: 8px; }
+
+/* ---------- 할 일 목록 ---------- */
+.task-list { list-style: none; }
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px dashed var(--line);
+}
+.task-item:first-child { border-top: none; }
+
+/* 동그란 체크 버튼 */
+.check {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--pink);
+  background: #fff;
+  color: #fff;
+  font-size: 15px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.task-item.is-done .check { background: var(--pink); }
+
+.task-title { flex: 1; word-break: break-word; }
+.task-item.is-done .task-title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* ---------- 완료한 일 (접기/펼치기) ---------- */
+.card-done { background: var(--mint-soft); }
+
+.done-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.chevron { transition: transform 0.2s; }
+.done-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+#list-done { margin-top: 8px; }
+
+/* ---------- '+' 버튼 ---------- */
+.fab {
+  position: fixed;
+  right: max(20px, calc(50% - 260px));
+  bottom: calc(var(--nav-h) + 18px + env(safe-area-inset-bottom));
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: none;
+  background: var(--pink);
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(228, 135, 155, 0.45);
+  cursor: pointer;
+  z-index: 20;
+}
+.fab:active { transform: scale(0.94); }
+
+/* ---------- 하단 메뉴 ---------- */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #fff;
+  border-top: 1px solid var(--line);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -4px 14px rgba(180, 140, 120, 0.10);
+  display: flex;
+  justify-content: space-around;
+  z-index: 30;
+}
+
+.nav-btn {
+  flex: 1;
+  max-width: 110px;
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.nav-icon {
+  width: 46px;
+  height: 30px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  font-size: 1.3rem;
+  transition: background 0.2s;
+}
+.nav-btn.active { color: var(--text); font-weight: 700; }
+.nav-btn.active .nav-icon { background: var(--pink-soft); }
+
+/* ---------- 아래에서 올라오는 입력창 ---------- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(74, 63, 58, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 40;
+}
+.sheet-backdrop.open { opacity: 1; visibility: visible; }
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 24px 24px 0 0;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  transform: translateY(105%);
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0.25s;
+  z-index: 50;
+}
+.sheet.open { transform: translateY(0); visibility: visible; }
+
+.sheet-handle {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  margin: 0 auto 14px;
+}
+.sheet-label { display: block; font-size: 1.05rem; margin-bottom: 10px; }
+
+.sheet-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  font-size: 16px; /* 16px 미만이면 일부 브라우저가 화면을 확대함 */
+  outline: none;
+}
+.sheet-input:focus { border-color: var(--pink); }
+.sheet-input.shake { animation: shake 0.35s; border-color: var(--pink-dark); }
+
+.sheet-note { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+
+.sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.btn {
+  border: none;
+  border-radius: 14px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-ghost   { background: #F5EEE9; }
+.btn-primary { background: var(--pink); color: #fff; }
+.btn-primary:active { background: var(--pink-dark); }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
