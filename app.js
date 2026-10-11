@@ -25,6 +25,12 @@
   let tasksFilter = 'all';    // 'all' 또는 카테고리 id
   let categories = [];        // [{ id, name }, ...]
 
+  // 달력 화면 데이터
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth() + 1;   // 1~12
+  let calSelected = todayStr;                 // 선택한 날짜 'YYYY-MM-DD'
+  let calData = { items: [], rules: [], tasksById: {} };
+
   let currentScreen = 'today';
   let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
   let toastTimer = null;
@@ -185,9 +191,7 @@
         add((today ? '오늘' : formatShortDate(occ.scheduledDate)) +
             (occ.time ? ' ' + occ.time : ''), overdue ? 'meta-overdue' : '');
       }
-      if (occ.originalDate && occ.originalDate !== occ.scheduledDate) {
-        add('원래 ' + formatShortDate(occ.originalDate));
-      }
+      // 원래 예정일은 목록에 표시하지 않음 (수정창과 리뷰 화면에서만 표시)
       if (item.rule && DB.FREQUENCIES[item.rule.frequency]) {
         add('🔁 ' + DB.FREQUENCIES[item.rule.frequency].label, 'meta-repeat');
       }
@@ -249,7 +253,7 @@
   // (먼저 반복 규칙에 따라 필요한 회차를 만들어 둠)
   async function reloadAll() {
     await DB.syncRecurrences(todayStr);
-    await Promise.all([loadToday(), loadTasks()]);
+    await Promise.all([loadToday(), loadTasks(), loadCalendar()]);
   }
 
   // 완료 / 완료 취소. 실제 완료일은 오늘 날짜로 자동 기록 (수정창에서 변경 가능)
@@ -295,6 +299,211 @@
       $('empty-' + key).hidden = items.length > 0;
       $('count-' + key).textContent = items.length ? String(items.length) : '';
     });
+  }
+
+  // ---------- 달력 화면 ----------
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  function calRange() {
+    const last = new Date(calYear, calMonth, 0).getDate();
+    const prefix = calYear + '-' + pad2(calMonth) + '-';
+    return { start: prefix + '01', end: prefix + pad2(last), last: last };
+  }
+
+  // '10월 12일' (요일 없이 짧게)
+  function formatMD(str) {
+    const p = str.split('-').map(Number);
+    return p[1] + '월 ' + p[2] + '일';
+  }
+
+  async function loadCalendar() {
+    const r = calRange();
+    calData = await DB.getCalendarData(r.start, r.end);
+    renderCalendar();
+  }
+
+  // 예정일 기준 반복 규칙으로 계산한 '앞으로 생길 회차' (저장하지 않음, 보여 주기만)
+  // 완료일 기준 반복은 다음 날짜를 미리 알 수 없으므로 이미 만들어진 회차만 표시됨
+  function calProjections(start, end) {
+    const list = [];
+    calData.rules.forEach((rule) => {
+      if (rule.basis !== 'scheduled' || !DB.FREQUENCIES[rule.frequency]) return;
+      const task = calData.tasksById[rule.taskId];
+      if (!task) return;
+      for (let k = rule.nextIndex, n = 0; n < 400; k++, n++) {
+        const d = DB.nthDate(rule.anchorDate, rule.frequency, k, rule.anchorDay);
+        if (d > end) break;
+        if (d >= start && d > todayStr) {
+          list.push({ date: d, title: task.title, time: rule.time, projection: true });
+        }
+      }
+    });
+    return list;
+  }
+
+  function dotClass(occ) {
+    if (occ.status === 'done') return 'dot-done';
+    if (occ.status === 'skipped') return 'dot-skip';
+    return occ.scheduledDate < todayStr ? 'dot-overdue' : 'dot-pending';
+  }
+
+  function renderCalendar() {
+    const r = calRange();
+    $('cal-title').textContent = calYear + '년 ' + calMonth + '월';
+
+    // 날짜별로 묶기 (예정일 기준)
+    const byDate = {};
+    calData.items.forEach((it) => {
+      const d = it.occurrence.scheduledDate;
+      if (d && d >= r.start && d <= r.end) (byDate[d] = byDate[d] || []).push(it);
+    });
+    const projByDate = {};
+    calProjections(r.start, r.end).forEach((p) => {
+      (projByDate[p.date] = projByDate[p.date] || []).push(p);
+    });
+
+    // 달력 칸 (월요일 시작)
+    const grid = $('cal-grid');
+    grid.innerHTML = '';
+    const firstDow = new Date(calYear, calMonth - 1, 1).getDay();   // 0=일
+    const blanks = (firstDow + 6) % 7;
+    for (let i = 0; i < blanks; i++) {
+      const b = document.createElement('div');
+      b.className = 'cal-blank';
+      grid.appendChild(b);
+    }
+    for (let day = 1; day <= r.last; day++) {
+      const dateStr = calYear + '-' + pad2(calMonth) + '-' + pad2(day);
+      const dow = new Date(calYear, calMonth - 1, day).getDay();
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cal-day' +
+        (dow === 6 ? ' sat' : '') + (dow === 0 ? ' sun' : '') +
+        (dateStr === todayStr ? ' today' : '') +
+        (dateStr === calSelected ? ' selected' : '');
+
+      const num = document.createElement('span');
+      num.className = 'cal-num';
+      num.textContent = String(day);
+      btn.appendChild(num);
+
+      const dots = document.createElement('span');
+      dots.className = 'cal-dots';
+      const classes = (byDate[dateStr] || []).map((it) => dotClass(it.occurrence))
+        .concat((projByDate[dateStr] || []).map(() => 'dot-proj'));
+      classes.slice(0, 4).forEach((c) => {
+        const dot = document.createElement('i');
+        dot.className = 'dot ' + c;
+        dots.appendChild(dot);
+      });
+      if (classes.length > 4) dots.appendChild(document.createTextNode('+'));
+      btn.appendChild(dots);
+
+      const count = classes.length;
+      btn.setAttribute('aria-label', calMonth + '월 ' + day + '일' + (count ? ', 할 일 ' + count + '개' : ''));
+      btn.addEventListener('click', () => {
+        calSelected = dateStr;
+        renderCalendar();
+      });
+      grid.appendChild(btn);
+    }
+
+    renderCalendarDay(byDate[calSelected] || [], projByDate[calSelected] || []);
+  }
+
+  // 선택한 날의 목록: 이날 예정된 할 일 + 이날 완료한 다른 날의 할 일
+  function renderCalendarDay(items, projections) {
+    $('cal-day-title').textContent = '🗓️ ' + formatShortDate(calSelected);
+
+    const sorted = items.slice().sort((a, b) => byTime(a, b) || byCreated(a, b));
+    const rows = sorted.map((it) => calRow(it, null));
+    projections
+      .slice()
+      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))
+      .forEach((p) => rows.push(calRow(null, p)));
+    fillList($('cal-day-list'), rows);
+    $('cal-day-empty').hidden = rows.length > 0;
+
+    const doneElsewhere = calData.items.filter((it) =>
+      it.occurrence.status === 'done' &&
+      it.occurrence.completedDate === calSelected &&
+      it.occurrence.scheduledDate !== calSelected);
+    fillList($('cal-done-list'), doneElsewhere.sort(byCreated).map((it) => calRow(it, null, true)));
+    $('cal-done-section').hidden = doneElsewhere.length === 0;
+  }
+
+  // 달력 목록 한 줄 (완료 체크 버튼 없음. 실제 할 일은 누르면 수정창)
+  function calRow(item, proj, elsewhere) {
+    const li = document.createElement('li');
+    const occ = item ? item.occurrence : null;
+    li.className = 'cal-row' +
+      (occ && occ.status === 'done' && !elsewhere ? ' is-done' : '') +
+      (proj ? ' is-proj' : '');
+
+    const time = proj ? proj.time : occ.time;
+    if (time) {
+      const t = document.createElement('span');
+      t.className = 'task-time';
+      t.textContent = time;
+      li.appendChild(t);
+    }
+
+    const title = document.createElement('span');
+    title.className = 'task-title';
+    title.textContent = proj ? proj.title : item.task.title;
+    li.appendChild(title);
+
+    let badgeText = '';
+    let badgeClass = '';
+    if (proj) {
+      badgeText = '반복 예정';
+      badgeClass = 'badge-proj';
+    } else if (elsewhere) {
+      badgeText = occ.scheduledDate ? '예정 ' + formatMD(occ.scheduledDate) : '날짜 없던 일';
+      badgeClass = 'badge-done';
+    } else if (occ.status === 'done') {
+      badgeText = occ.completedDate && occ.completedDate !== occ.scheduledDate
+        ? formatMD(occ.completedDate) + ' 완료' : '완료';
+      badgeClass = 'badge-done';
+    } else if (occ.status === 'skipped') {
+      badgeText = '건너뜀';
+    } else if (occ.scheduledDate < todayStr) {
+      badgeText = '기한 지남';
+      badgeClass = 'badge-overdue';
+    }
+    if (badgeText) {
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + badgeClass;
+      badge.textContent = badgeText;
+      li.appendChild(badge);
+    }
+
+    if (proj) {
+      li.addEventListener('click', () =>
+        showToast('반복 규칙으로 계산한 예정 회차예요. 날짜가 다가오면 할 일로 생겨요'));
+    } else {
+      li.setAttribute('role', 'button');
+      li.tabIndex = 0;
+      li.addEventListener('click', () => openEdit(occ.id));
+    }
+    return li;
+  }
+
+  function moveCalendarMonth(delta) {
+    const d = new Date(calYear, calMonth - 1 + delta, 1);
+    calYear = d.getFullYear();
+    calMonth = d.getMonth() + 1;
+    const thisMonth = todayStr.slice(0, 7) === calYear + '-' + pad2(calMonth);
+    calSelected = thisMonth ? todayStr : calYear + '-' + pad2(calMonth) + '-01';
+    loadCalendar().catch((err) => showError('달력을 불러오지 못했어요.', err));
+  }
+
+  function goCalendarToday() {
+    const t = todayStr.split('-').map(Number);
+    calYear = t[0];
+    calMonth = t[1];
+    calSelected = todayStr;
+    loadCalendar().catch((err) => showError('달력을 불러오지 못했어요.', err));
   }
 
   function renderFilterChips() {
@@ -376,8 +585,15 @@
 
     const hints = [];
     const occ = editing && editing.mode === 'edit' ? editing.item.occurrence : null;
-    if (occ && occ.originalDate && occ.originalDate !== $('edit-date').value) {
-      hints.push('원래 예정일: ' + formatShortDate(occ.originalDate) + ' (보존됨)');
+    if (occ && occ.originalDate) {
+      const dateChanged = $('edit-date').value !== (occ.scheduledDate || '');
+      if (occ.originalDate !== occ.scheduledDate) {
+        // 이미 미룬 적이 있는 회차
+        hints.push('원래 예정일: ' + formatShortDate(occ.originalDate));
+      } else if (dateChanged && !DB.isDateCorrection(occ, todayStr)) {
+        // 이번에 바꾸면 '미룸'으로 기록됨
+        hints.push('원래 예정일(' + formatShortDate(occ.originalDate) + ')이 기록으로 남아요');
+      }
     }
     if (!hasDate) hints.push('날짜를 비우면 \'날짜 없는 할 일\'로 저장돼요');
     $('edit-date-hint').textContent = hints.join(' · ');
@@ -727,6 +943,11 @@
     $('sheet-backdrop').addEventListener('click', closeSheet);
     $('quick-add-sheet').addEventListener('submit', submitQuickAdd);
     $('done-toggle').addEventListener('click', toggleDoneList);
+
+    // 달력
+    $('cal-prev').addEventListener('click', () => moveCalendarMonth(-1));
+    $('cal-next').addEventListener('click', () => moveCalendarMonth(1));
+    $('cal-today').addEventListener('click', goCalendarToday);
 
     // 수정창
     $('edit-sheet').addEventListener('submit', submitEdit);

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 
@@ -77,9 +77,35 @@
       <header class="screen-header">
         <h1 class="screen-title">📅 달력</h1>
       </header>
-      <div class="card placeholder">
-        <span class="placeholder-emoji">🗓️</span>
-        6단계에서 만들 예정이에요
+
+      <div class="card cal-card">
+        <div class="cal-head">
+          <button type="button" class="cal-nav" id="cal-prev" aria-label="이전 달">‹</button>
+          <h2 class="cal-title" id="cal-title"></h2>
+          <button type="button" class="cal-nav" id="cal-next" aria-label="다음 달">›</button>
+          <button type="button" class="cal-today-btn" id="cal-today">오늘</button>
+        </div>
+        <div class="cal-weekdays" aria-hidden="true">
+          <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span>
+          <span class="sat">토</span><span class="sun">일</span>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend" aria-hidden="true">
+          <span><i class="dot dot-pending"></i>할 일</span>
+          <span><i class="dot dot-overdue"></i>기한 지남</span>
+          <span><i class="dot dot-done"></i>완료</span>
+          <span><i class="dot dot-proj"></i>반복 예정</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title" id="cal-day-title"></h2>
+        <ul class="task-list" id="cal-day-list"></ul>
+        <p class="empty" id="cal-day-empty">이날 예정된 할 일이 없어요</p>
+        <div id="cal-done-section" hidden>
+          <h3 class="sub-title">✅ 이날 완료한 다른 날의 할 일</h3>
+          <ul class="task-list" id="cal-done-list"></ul>
+        </div>
       </div>
     </section>
 
@@ -239,7 +265,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=4" defer></script>
-  <script src="app.js?v=4" defer></script>
+  <script src="db.js?v=6" defer></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>

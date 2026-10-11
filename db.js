@@ -234,6 +234,7 @@ const DB = (function () {
       time: date ? (fields.time || null) : null,   // 날짜가 없으면 시간도 없음
       status: 'pending',          // 'pending' | 'done' | 'skipped'
       completedDate: null,        // 실제 완료일
+      createdBy: 'user',          // 'user'(직접 만듦) | 'auto'(반복 규칙이 만듦)
       createdAt: now,
       updatedAt: now
     };
@@ -299,6 +300,38 @@ const DB = (function () {
     return getItemsByIndex('status', 'pending');
   }
 
+  // 달력용: 기간(start~end) 안에 예정된 회차 + 기간 안에 완료한 회차, 할 일 정보, 진행 중인 규칙
+  // 돌려주는 값: { items: [{ occurrence, task }], rules: [...], tasksById: { id: task } }
+  async function getCalendarData(start, end) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['occurrences', 'tasks', 'rules'], 'readonly');
+      const byId = {};
+      const tasksById = {};
+      let rules = [];
+      tx.oncomplete = () => {
+        const items = Object.keys(byId)
+          .map((id) => byId[id])
+          .filter((o) => tasksById[o.taskId])
+          .map((o) => ({ occurrence: o, task: tasksById[o.taskId] }));
+        resolve({ items: items, rules: rules, tasksById: tasksById });
+      };
+      tx.onerror = () => reject(tx.error);
+
+      const os = tx.objectStore('occurrences');
+      const r1 = os.index('scheduledDate').getAll(IDBKeyRange.bound(start, end));
+      r1.onsuccess = () => r1.result.forEach((o) => { byId[o.id] = o; });
+      const r2 = os.index('status').getAll('done');
+      r2.onsuccess = () => r2.result.forEach((o) => {
+        if (o.completedDate && o.completedDate >= start && o.completedDate <= end) byId[o.id] = o;
+      });
+      const r3 = tx.objectStore('tasks').getAll();
+      r3.onsuccess = () => r3.result.forEach((t) => { tasksById[t.id] = t; });
+      const r4 = tx.objectStore('rules').getAll();
+      r4.onsuccess = () => { rules = r4.result.filter((r) => r.active); };
+    });
+  }
+
   // 회차 1개 + 할 일 정보 + 진행 중인 반복 규칙 (없으면 null)
   async function getItem(occurrenceId) {
     const db = await open();
@@ -326,6 +359,20 @@ const DB = (function () {
         };
       };
     });
+  }
+
+  // 날짜 변경이 '실수 수정'인지 판단 (true면 원래 예정일을 남기지 않음)
+  //   - 원래 예정일이 아직 오지 않음: 미리 계획을 바꾸는 것
+  //   - 오늘 직접 만든 회차: 방금 잘못 넣은 것
+  //     (반복 규칙이 자동으로 만든 회차는 제외 → 오늘 회차를 다른 날로 옮기면 '미룸'으로 기록)
+  // 그 외(예정일 당일이나 지난 뒤 변경)는 '미룸'으로 보고 원래 예정일 보존
+  function isDateCorrection(occ, todayStr) {
+    if (!occ.originalDate) return true;
+    if (occ.originalDate > todayStr) return true;
+    const byUser = occ.createdBy
+      ? occ.createdBy === 'user'
+      : !(occ.seq > 0) && !occ.generatedFrom;     // 이 규칙 이전에 만든 기록용 판단
+    return byUser && toDateStr(new Date(occ.createdAt)) === todayStr;
   }
 
   // 할 일 수정 (할 일 정보 + 회차 정보 + 반복 규칙을 한 번에 저장)
@@ -366,7 +413,10 @@ const DB = (function () {
         // 2) 이 회차의 날짜·시간
         const newDate = fields.date || null;
         const newTime = newDate ? (fields.time || null) : null;
-        if (occ.originalDate === null) occ.originalDate = newDate;
+        // 실수 수정이면 원래 예정일도 함께 고침 (기록 안 남김), 미룬 것이면 원래 예정일 보존
+        if (occ.originalDate === null || isDateCorrection(occ, toDateStr())) {
+          occ.originalDate = newDate;
+        }
         occ.scheduledDate = newDate;
         occ.time = newTime;
         occ.auto = false;            // 사용자가 손댄 회차 (자동 정리 대상에서 제외)
@@ -553,6 +603,7 @@ const DB = (function () {
           seq: seq,
           generatedFrom: fromId || null,
           auto: true,                 // 자동으로 만든 회차 (아직 손대지 않음)
+          createdBy: 'auto',
           createdAt: now,
           updatedAt: now
         });
@@ -621,6 +672,7 @@ const DB = (function () {
     addQuickTask: addQuickTask,
     getItemsByDate: getItemsByDate,
     getPendingItems: getPendingItems,
+    getCalendarData: getCalendarData,
     getItem: getItem,
     updateItem: updateItem,
     setOccurrenceDone: setOccurrenceDone,
@@ -632,7 +684,8 @@ const DB = (function () {
     getSetting: getSetting,
     getCategories: getCategories,
     FREQUENCIES: FREQUENCIES,
-    nthDate: nthDate
+    nthDate: nthDate,
+    isDateCorrection: isDateCorrection
   };
 
 })();

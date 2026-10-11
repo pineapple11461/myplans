@@ -476,3 +476,145 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 
 /* 목록의 반복 표시 */
 .meta-repeat { color: var(--pink-dark); }
+
+/* =========================================
+   6단계 추가: 달력
+   ========================================= */
+
+.cal-card { padding: 14px 12px 12px; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+.cal-title { font-size: 1.15rem; flex: 1; text-align: center; }
+.cal-nav {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--pink-soft);
+  color: var(--pink-dark);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.cal-today-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.cal-weekdays,
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cal-weekdays span {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding-bottom: 4px;
+}
+.cal-weekdays .sat, .cal-day.sat .cal-num { color: #7A9CC6; }
+.cal-weekdays .sun, .cal-day.sun .cal-num { color: var(--pink-dark); }
+
+.cal-day {
+  aspect-ratio: 1 / 1.05;
+  min-height: 42px;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 5px;
+  gap: 3px;
+  cursor: pointer;
+}
+.cal-blank { aspect-ratio: 1 / 1.05; min-height: 42px; }
+
+.cal-num {
+  width: 26px;
+  height: 26px;
+  line-height: 26px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 0.9rem;
+}
+.cal-day.today .cal-num { background: var(--pink); color: #fff; font-weight: 700; }
+.cal-day.selected { background: var(--pink-soft); }
+
+.cal-dots {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  height: 6px;
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+
+/* 상태 점 (달력 칸과 범례에서 같이 사용) */
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot-pending { background: var(--pink); }
+.dot-overdue { background: #D9667F; }
+.dot-done    { background: #8FCFB5; }
+.dot-skip    { background: #D8CEC7; }
+.dot-proj    { border: 1.5px solid var(--pink); background: transparent; width: 6px; height: 6px; box-sizing: border-box; }
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* 선택한 날의 목록 */
+.sub-title { font-size: 0.95rem; margin: 14px 0 4px; }
+
+.cal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px dashed var(--line);
+  cursor: pointer;
+}
+.cal-row:first-child { border-top: none; }
+.cal-row .task-title { flex: 1; }
+.cal-row.is-done .task-title { color: var(--muted); text-decoration: line-through; }
+.cal-row.is-proj { cursor: default; }
+.cal-row.is-proj .task-title { color: var(--muted); }
+
+.badge {
+  flex: none;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #F5EEE9;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge-done    { background: var(--mint-soft); color: #4E9A7E; }
+.badge-overdue { background: var(--pink-soft); color: var(--pink-dark); }
+.badge-proj    { background: none; border: 1px dashed var(--pink); color: var(--pink-dark); }
