@@ -4,15 +4,15 @@
 
 /* ---------- 색상과 공통 값 ---------- */
 :root {
-  --bg: #FFF6EE;          /* 바탕: 따뜻한 크림색 */
+  --bg: #FFFCF6;          /* 바탕: 노트 종이색 (디자인 A) */
   --card: #FFFFFF;
-  --text: #4A3F3A;        /* 본문: 부드러운 갈색 */
-  --muted: #A0928A;       /* 흐린 글자 */
-  --line: #F1E4DA;        /* 구분선 */
+  --text: #4A3A33;        /* 본문: 부드러운 갈색 */
+  --muted: #A08F84;       /* 흐린 글자 */
+  --line: #EFE4DB;        /* 구분선 */
 
-  --pink: #F4A3B5;
-  --pink-dark: #E4879B;
-  --pink-soft: #FDE8ED;
+  --pink: #F2A1B4;
+  --pink-dark: #E07D96;
+  --pink-soft: #FDE3EA;
   --mint-soft: #EAF6F0;
 
   --radius: 20px;
@@ -1117,3 +1117,119 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
   line-height: 1.5;
   margin-bottom: 10px;
 }
+
+/* =========================================================
+   10단계: 디자인 A '스티커 다이어리'
+   모눈 노트 바탕 · 마스킹테이프 카드 · 손글씨 제목(개구) · 본문은 고운돋움
+   ※ 이 묶음을 지우면 이전 디자인으로 돌아감 (위쪽 색상 값 제외)
+   ========================================================= */
+:root {
+  --head-font: "Gaegu", "Gowun Dodum", cursive;   /* 제목용 손글씨 */
+  --tape-1: #F7B7C6;   /* 분홍 테이프 */
+  --tape-2: #A9DCC8;   /* 민트 테이프 */
+  --tape-3: #F8DD8B;   /* 노랑 테이프 */
+  --tape-4: #C9B9EE;   /* 보라 테이프 */
+  --paper-line: #EADFD6;
+}
+
+/* 모눈 노트 바탕 */
+body {
+  background-image: radial-gradient(#E9DFD3 1px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+/* ----- 손글씨 제목 (작은 글씨는 읽기 쉽게 고운돋움 유지) ----- */
+.today-date,
+.screen-title,
+.card-title,
+.sheet-label,
+.week-label strong,
+.cal-title,
+.data-title,
+.review-week-title,
+.done-toggle > span:first-child {
+  font-family: var(--head-font);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.today-date { font-size: 2.25rem; line-height: 1.15; }
+.screen-title { font-size: 1.95rem; }
+.card-title { font-size: 1.32rem; }
+.card-title .count { font-family: "Gowun Dodum", sans-serif; font-size: 0.85rem; font-weight: 400; }
+.sheet-label { font-size: 1.4rem; }
+.week-label strong, .cal-title { font-size: 1.38rem; }
+.data-title { font-size: 1.25rem; }
+.review-week-title { font-size: 1.2rem; }
+.done-toggle { color: #6B9C86; }
+.done-toggle > span:first-child { font-size: 1.22rem; }
+
+/* ----- 카드: 한쪽만 더 둥근 모서리 + 마스킹테이프 ----- */
+.card {
+  border: none;
+  border-radius: 6px 18px 6px 18px;
+  box-shadow: 0 2px 0 var(--paper-line);
+  position: relative;
+  padding-top: 20px;
+  margin-bottom: 20px;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 22px;
+  width: 64px;
+  height: 16px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.45) 0 6px, transparent 6px 12px),
+    var(--tape, var(--tape-1));
+  transform: rotate(-4deg);
+  border-radius: 2px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+/* 카드마다 테이프 색과 위치를 조금씩 다르게 */
+.card:nth-of-type(4n+2) { --tape: var(--tape-2); }
+.card:nth-of-type(4n+3) { --tape: var(--tape-3); }
+.card:nth-of-type(4n)   { --tape: var(--tape-4); }
+.card:nth-of-type(2n)::before { left: auto; right: 26px; transform: rotate(3deg); }
+
+/* 주·달 이동 카드는 테이프 없이 단정하게 */
+.week-nav { padding-top: 12px; border-radius: 18px; margin-bottom: 18px; }
+.week-nav::before { display: none; }
+
+.card-done { background: #fff; }
+.card-overdue { box-shadow: 0 2px 0 #F3C7D2; }
+.placeholder { padding-top: 36px; }
+
+/* ----- 할 일 줄 ----- */
+.task-time {
+  background: #FFF1C2;
+  color: #A3790F;
+  font-family: var(--head-font);
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0 8px;
+}
+
+/* ----- 버튼들: 살짝 눌리는 스티커 느낌 ----- */
+.fab { box-shadow: 0 4px 0 #D9849A; }
+.fab:active { transform: translateY(3px); box-shadow: 0 1px 0 #D9849A; }
+.btn-primary { box-shadow: 0 3px 0 #D9849A; }
+.btn-primary:active { transform: translateY(2px); box-shadow: 0 1px 0 #D9849A; }
+.mbtn-plus { box-shadow: 0 2px 0 #D9849A; }
+.settings-btn { box-shadow: none; border: 1.5px solid var(--paper-line); }
+
+/* ----- 하단 메뉴 ----- */
+.bottom-nav {
+  border-top: 1.5px dashed var(--paper-line);
+  box-shadow: none;
+}
+
+/* ----- 아래에서 올라오는 창: 종이색 바탕, 입력칸은 흰색 ----- */
+.sheet { background: var(--bg); }
+.sheet .sheet-input { background: #fff; }
+.sheet .data-block { background: #fff; border-color: var(--paper-line); }
+
+/* ----- 탭·필터: 종이 위에 붙은 느낌 ----- */
+.seg-tabs { box-shadow: 0 2px 0 var(--paper-line); border-color: var(--paper-line); }
+.chip { border-color: var(--paper-line); }
