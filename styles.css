@@ -102,6 +102,17 @@ button, input { font: inherit; color: inherit; }
 .task-item.is-done .check { background: var(--pink); }
 
 .task-title { flex: 1; word-break: break-word; }
+
+/* 시간 지정 일정의 시간 표시 */
+.task-time {
+  flex: none;
+  background: var(--pink-soft);
+  color: var(--pink-dark);
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
 .task-item.is-done .task-title {
   color: var(--muted);
   text-decoration: line-through;
