@@ -872,3 +872,52 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 /* 미션 추가줄의 목표 횟수 칸 */
 .inline-add .target-input { flex: none; width: 56px; text-align: center; padding: 10px 6px; }
 .target-unit { align-self: center; color: var(--muted); font-size: 0.9rem; margin-left: -4px; }
+
+/* =========================================
+   7-4단계 추가: 데일리 루틴
+   ========================================= */
+
+.day-chips {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.day-chip {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 5px 0 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+  position: relative;
+}
+.day-chip small { font-size: 0.72rem; }
+.day-chip.is-today { color: var(--pink-dark); font-weight: 700; }
+.day-chip.selected { border-color: var(--pink); background: var(--pink-soft); color: var(--text); }
+.day-chip:disabled { opacity: 0.35; cursor: default; }
+/* 그날 루틴을 모두 함: 아래쪽 민트 점 / 일부만 함: 연한 점 */
+.day-chip.all-done::after,
+.day-chip.some-done::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8FCFB5;
+}
+.day-chip.some-done::after { background: #D8CEC7; }
+
+.routine-list { list-style: none; margin-top: 4px; }
+.routine-name { cursor: pointer; }
+.check:disabled { opacity: 0.35; cursor: default; }

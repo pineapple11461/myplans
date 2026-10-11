@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v11';
+  const APP_VERSION = 'v12';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -43,6 +43,10 @@
   let missions = [];               // 모든 미션 (보관한 것 포함)
   let missionWeek = { targets: {}, logs: [] };   // 보고 있는 주의 미션 목표 고침·실천 기록
   let missionArchivedOpen = false;
+  let routines = [];               // 모든 루틴 (보관한 것 포함)
+  let routineDone = {};            // 'routineId|date' → true (실천한 날만)
+  let routineDay = todayStr;       // 루틴 카드에서 선택한 날짜
+  let routineArchivedOpen = false;
   let trackerEditing = null;       // 트래커 수정창 상태: { kind: 'habit', item }
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
@@ -530,7 +534,9 @@
       DB.getHabits(),
       DB.getHabitLogs(trackerWeek),
       DB.getMissions(),
-      DB.getMissionWeek(trackerWeek)
+      DB.getMissionWeek(trackerWeek),
+      DB.getRoutines(),
+      DB.getRoutineLogs(trackerWeek)
     ]);
     weeklyGoals = results[0];
     habits = results[1];
@@ -538,6 +544,9 @@
     results[2].forEach((log) => { habitLogMap[log.id] = log.state; });
     missions = results[3];
     missionWeek = results[4];
+    routines = results[5];
+    routineDone = {};
+    results[6].forEach((log) => { if (log.done) routineDone[log.id] = true; });
     renderTracker();
   }
 
@@ -546,6 +555,7 @@
     renderGoals();
     renderHabits();
     renderMissions();
+    renderRoutines();
   }
 
   function renderWeekNav() {
@@ -568,6 +578,8 @@
     trackerWeek = deltaWeeks === 0
       ? DB.weekStartOf(todayStr)
       : DB.addDays(trackerWeek, deltaWeeks * 7);
+    // 루틴 날짜: 이번 주면 오늘, 다른 주면 그 주 월요일
+    routineDay = trackerWeek === DB.weekStartOf(todayStr) ? todayStr : trackerWeek;
     loadTracker().catch((err) => showError('트래커를 불러오지 못했어요.', err));
   }
 
@@ -1033,13 +1045,166 @@
     }
   }
 
-  // ----- 보관 / 완전 삭제 (습관·미션 공통으로 호출) -----
+  // ----- 데일리 루틴 -----
+
+  // 그날 보일 루틴: 시작한 날 이후이고, 보관한 날 이전
+  function routinesForDay(date) {
+    return routines.filter((r) =>
+      (r.startDate || '') <= date && (!r.archivedDate || date < r.archivedDate));
+  }
+
+  function renderRoutines() {
+    // 날짜 버튼 (월~일). 그날 루틴을 모두 하면 꽉 찬 표시, 일부면 반만
+    const chips = $('routine-days');
+    chips.innerHTML = '';
+    for (let i = 0; i < 7; i++) {
+      const d = DB.addDays(trackerWeek, i);
+      const list = routinesForDay(d);
+      const done = list.filter((r) => routineDone[r.id + '|' + d]).length;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'day-chip' +
+        (d === routineDay ? ' selected' : '') +
+        (d === todayStr ? ' is-today' : '') +
+        (list.length && done === list.length ? ' all-done' : done > 0 ? ' some-done' : '');
+      btn.disabled = d > todayStr;
+      const wd = document.createElement('span');
+      wd.textContent = '월화수목금토일'[i];
+      const dn = document.createElement('small');
+      dn.textContent = String(Number(d.slice(8)));
+      btn.appendChild(wd);
+      btn.appendChild(dn);
+      btn.setAttribute('aria-label', formatShortDate(d) + (list.length ? ', ' + done + '/' + list.length : ''));
+      btn.setAttribute('aria-pressed', String(d === routineDay));
+      btn.addEventListener('click', () => {
+        routineDay = d;
+        renderRoutines();
+      });
+      chips.appendChild(btn);
+    }
+
+    // 선택한 날의 체크리스트
+    const day = routineDay;
+    const visible = routinesForDay(day);
+    const list = $('routine-list');
+    list.innerHTML = '';
+    let doneCount = 0;
+    visible.forEach((r) => {
+      const isDone = !!routineDone[r.id + '|' + day];
+      if (isDone) doneCount++;
+      const li = document.createElement('li');
+      li.className = 'task-item' + (isDone ? ' is-done' : '');
+
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'check';
+      check.textContent = isDone ? '✓' : '';
+      check.disabled = day > todayStr;
+      check.setAttribute('aria-label', r.name + (isDone ? ' 실천 취소' : ' 실천'));
+      check.addEventListener('click', () => toggleRoutine(r, day));
+
+      const name = document.createElement('span');
+      name.className = 'task-title routine-name';
+      name.textContent = r.name;
+      name.setAttribute('role', 'button');
+      name.tabIndex = 0;
+      name.addEventListener('click', () => openTrackerSheet('routine', r));
+
+      li.appendChild(check);
+      li.appendChild(name);
+      list.appendChild(li);
+    });
+    $('routine-empty').hidden = visible.length > 0;
+    $('routine-progress').textContent = visible.length
+      ? (day === todayStr ? '오늘 ' : formatMD(day) + ' ') + doneCount + '/' + visible.length
+      : '';
+
+    renderArchivedSection('routine', routines.filter((r) => r.archivedDate), routineArchivedOpen,
+      (r) => setTrackerArchived('routine', r, false),
+      (r) => deleteTrackerFully('routine', r));
+  }
+
+  // 체크: 화면을 먼저 바꾸고 순서대로 저장 (실패하면 저장소 상태로 되돌림)
+  function toggleRoutine(routine, date) {
+    const key = routine.id + '|' + date;
+    const next = !routineDone[key];
+    if (next) routineDone[key] = true;
+    else delete routineDone[key];
+    renderRoutines();
+
+    saveQueue = saveQueue
+      .then(() => DB.setRoutineLog(routine.id, date, next))
+      .catch((err) => {
+        showError('루틴 기록을 저장하지 못했어요.', err);
+        return loadTracker().catch(() => {});
+      });
+  }
+
+  async function addRoutine(event) {
+    event.preventDefault();
+    if (busy) return;
+    const input = $('routine-add-input');
+    const name = input.value.trim();
+    if (!name) { shake(input); return; }
+    // 지난 날짜를 보면서 추가하면 그날부터, 그 외에는 오늘부터 표시
+    const startDate = routineDay < todayStr ? routineDay : todayStr;
+    busy = true;
+    try {
+      await DB.addRoutine(name, startDate);
+      input.value = '';
+      await loadTracker();
+    } catch (err) {
+      showError('루틴을 저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 보관: 오늘부터 목록에서 사라짐. 어제까지의 기록은 그대로
+  async function setRoutineArchived(routine, archive) {
+    if (busy) return;
+    busy = true;
+    try {
+      await DB.updateRoutine(routine.id, { archivedDate: archive ? todayStr : null });
+      closeSheet();
+      await loadTracker();
+      showToast(archive ? '\'' + routine.name + '\'을(를) 보관했어요' : '보관을 해제했어요');
+    } catch (err) {
+      showError('저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function deleteRoutineFully(routine) {
+    if (busy) return;
+    try {
+      const count = await DB.countRoutineLogs(routine.id);
+      let msg = '\'' + routine.name + '\' 루틴을 완전히 삭제할까요?';
+      if (count > 0) msg += '\n\n실천 기록 ' + count + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      msg += '\n\n기록을 남기고 목록에서만 빼려면 \'보관\'을 사용하세요.';
+      if (!confirm(msg)) return;
+      busy = true;
+      await DB.deleteRoutine(routine.id);
+      closeSheet();
+      await loadTracker();
+      showToast('삭제했어요');
+    } catch (err) {
+      showError('삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ----- 보관 / 완전 삭제 (습관·미션·루틴 공통으로 호출) -----
   function setTrackerArchived(kind, item, archive) {
     if (kind === 'habit') return setHabitArchived(item, archive);
+    if (kind === 'routine') return setRoutineArchived(item, archive);
     return setMissionArchived(item, archive);
   }
   function deleteTrackerFully(kind, item) {
     if (kind === 'habit') return deleteHabitFully(item);
+    if (kind === 'routine') return deleteRoutineFully(item);
     return deleteMissionFully(item);
   }
 
@@ -1078,17 +1243,24 @@
     }
   }
 
-  // ----- 트래커 항목 수정창 (습관·미션 공통) -----
+  // 보관 여부 (습관·미션은 주 단위, 루틴은 날짜 단위로 저장)
+  function isTrackerArchived(item) {
+    return !!(item.archivedWeek || item.archivedDate);
+  }
+
+  // ----- 트래커 항목 수정창 (습관·미션·루틴 공통) -----
   function openTrackerSheet(kind, item) {
     trackerEditing = { kind: kind, item: item };
-    const isArchived = !!item.archivedWeek;
-    const label = kind === 'habit' ? '습관' : '미션';
+    const isArchived = isTrackerArchived(item);
+    const label = { habit: '습관', mission: '미션', routine: '루틴' }[kind];
     $('tracker-sheet-title').textContent = label + ' 수정';
     $('tracker-name').value = item.name;
     $('tracker-archive').textContent = isArchived ? '보관 해제' : '보관';
     $('tracker-sheet-hint').textContent = isArchived
       ? '보관 중인 ' + label + '이에요'
-      : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
+      : kind === 'routine'
+        ? '보관하면 오늘부터 목록에서 사라지고, 어제까지의 기록은 그대로 남아요'
+        : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
 
     // 미션만: 목표 횟수
     const isMission = kind === 'mission';
@@ -1128,6 +1300,8 @@
       // 이름을 바꾸면 지난 주에도 새 이름으로 보임 (기록은 그대로)
       if (kind === 'habit') {
         await DB.updateHabit(item.id, { name: name });
+      } else if (kind === 'routine') {
+        await DB.updateRoutine(item.id, { name: name });
       } else {
         if (name !== item.name) await DB.updateMission(item.id, { name: name });
         if (newTarget !== null) {
@@ -1567,6 +1741,9 @@
   function refreshIfDateChanged() {
     const now = DB.toDateStr();
     if (now !== todayStr) {
+      // 트래커가 '오늘'을 보고 있었다면 새 날짜로 따라감
+      if (trackerWeek === DB.weekStartOf(todayStr)) trackerWeek = DB.weekStartOf(now);
+      if (routineDay === todayStr) routineDay = now;
       todayStr = now;
       renderDate();
       reloadAll().catch((err) => showError('목록을 불러오지 못했어요.', err));
@@ -1605,13 +1782,18 @@
     $('tracker-archive').addEventListener('click', () => {
       if (trackerEditing) {
         const item = trackerEditing.item;
-        setTrackerArchived(trackerEditing.kind, item, !item.archivedWeek);
+        setTrackerArchived(trackerEditing.kind, item, !isTrackerArchived(item));
       }
     });
     $('tracker-delete').addEventListener('click', () => {
       if (trackerEditing) deleteTrackerFully(trackerEditing.kind, trackerEditing.item);
     });
     $('mission-add-form').addEventListener('submit', addMission);
+    $('routine-add-form').addEventListener('submit', addRoutine);
+    $('routine-archived-toggle').addEventListener('click', () => {
+      routineArchivedOpen = !routineArchivedOpen;
+      renderRoutines();
+    });
     $('mission-archived-toggle').addEventListener('click', () => {
       missionArchivedOpen = !missionArchivedOpen;
       renderMissions();

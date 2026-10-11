@@ -889,6 +889,69 @@ const DB = (function () {
     });
   }
 
+  // ---------- 트래커: 데일리 루틴 ----------
+  // 루틴: { id, name, startDate(이 날부터 표시), archivedDate(이 날부터 숨김, 없으면 null), createdAt, updatedAt }
+  // 기록: { id: 'routineId|date', routineId, date, done: true, updatedAt }
+  //   실천한 날만 기록이 있음 (기록이 없으면 '안 함')
+
+  function getRoutines() {
+    return run(['routines'], 'readonly', (tx) => tx.objectStore('routines').getAll())
+      .then((list) => list.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+  }
+
+  function addRoutine(name, startDate) {
+    const now = nowISO();
+    const routine = { id: newId(), name: name, startDate: startDate, archivedDate: null, createdAt: now, updatedAt: now };
+    return run(['routines'], 'readwrite', (tx) => {
+      tx.objectStore('routines').add(routine);
+      return routine;
+    });
+  }
+
+  // changes: { name } 또는 { archivedDate } (보관: 날짜, 보관 해제: null)
+  function updateRoutine(id, changes) {
+    return run(['routines'], 'readwrite', (tx) => {
+      const store = tx.objectStore('routines');
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const r = req.result;
+        if (!r) { tx.abort(); return; }
+        if ('name' in changes) r.name = changes.name;
+        if ('archivedDate' in changes) r.archivedDate = changes.archivedDate;
+        r.updatedAt = nowISO();
+        store.put(r);
+      };
+    });
+  }
+
+  function deleteRoutine(id) {
+    return run(['routines', 'routineLogs'], 'readwrite', (tx) => {
+      tx.objectStore('routines').delete(id);
+      const logs = tx.objectStore('routineLogs');
+      const req = logs.index('routineId').getAllKeys(id);
+      req.onsuccess = () => req.result.forEach((key) => logs.delete(key));
+    });
+  }
+
+  function countRoutineLogs(id) {
+    return run(['routineLogs'], 'readonly', (tx) => tx.objectStore('routineLogs').index('routineId').count(id));
+  }
+
+  // 한 주(월~일)의 루틴 기록
+  function getRoutineLogs(weekStart) {
+    const range = IDBKeyRange.bound(weekStart, addDays(weekStart, 6));
+    return run(['routineLogs'], 'readonly', (tx) => tx.objectStore('routineLogs').index('date').getAll(range));
+  }
+
+  function setRoutineLog(routineId, date, done) {
+    const id = routineId + '|' + date;
+    return run(['routineLogs'], 'readwrite', (tx) => {
+      const store = tx.objectStore('routineLogs');
+      if (done) store.put({ id: id, routineId: routineId, date: date, done: true, updatedAt: nowISO() });
+      else store.delete(id);
+    });
+  }
+
   // ---------- 설정 ----------
 
   function getSetting(key) {
@@ -945,7 +1008,14 @@ const DB = (function () {
     addMissionLog: addMissionLog,
     removeLastMissionLog: removeLastMissionLog,
     countMissionLogs: countMissionLogs,
-    deleteMission: deleteMission
+    deleteMission: deleteMission,
+    getRoutines: getRoutines,
+    addRoutine: addRoutine,
+    updateRoutine: updateRoutine,
+    deleteRoutine: deleteRoutine,
+    countRoutineLogs: countRoutineLogs,
+    getRoutineLogs: getRoutineLogs,
+    setRoutineLog: setRoutineLog
   };
 
 })();

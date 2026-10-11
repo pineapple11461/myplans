@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
 
@@ -183,9 +183,23 @@
         </div>
       </div>
 
-      <div class="card placeholder">
-        <span class="placeholder-emoji">🪴</span>
-        데일리 루틴은 이어서 추가할 예정이에요
+      <!-- 데일리 루틴 -->
+      <div class="card">
+        <h2 class="card-title">☀️ 데일리 루틴 <span class="count" id="routine-progress"></span></h2>
+        <div class="day-chips" id="routine-days" role="group" aria-label="날짜 선택"></div>
+        <ul class="routine-list" id="routine-list"></ul>
+        <p class="empty" id="routine-empty">매일 하는 루틴을 추가해 보세요 (예: 아침 물 한 잔)</p>
+        <form class="inline-add" id="routine-add-form" autocomplete="off">
+          <input type="text" id="routine-add-input" class="sheet-input"
+                 placeholder="루틴 추가" maxlength="50" enterkeyhint="done">
+          <button type="submit" class="btn btn-primary">추가</button>
+        </form>
+        <div class="archived" id="routine-archived" hidden>
+          <button type="button" class="archived-toggle" id="routine-archived-toggle" aria-expanded="false">
+            보관한 루틴 <span id="routine-archived-count">0</span>개 <span aria-hidden="true">▾</span>
+          </button>
+          <ul class="archived-list" id="routine-archived-list" hidden></ul>
+        </div>
       </div>
     </section>
 
@@ -357,7 +371,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=11" defer></script>
-  <script src="app.js?v=11" defer></script>
+  <script src="db.js?v=12" defer></script>
+  <script src="app.js?v=12" defer></script>
 </body>
 </html>
