@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 
@@ -162,9 +162,30 @@
         </div>
       </div>
 
+      <!-- 주간 미션 -->
+      <div class="card">
+        <h2 class="card-title">🏃 주간 미션</h2>
+        <ul class="mission-list" id="mission-list"></ul>
+        <p class="empty" id="mission-empty">미션을 추가해 보세요 (예: 산책 3회)</p>
+        <form class="inline-add" id="mission-add-form" autocomplete="off">
+          <input type="text" id="mission-add-input" class="sheet-input"
+                 placeholder="미션 이름" maxlength="50" enterkeyhint="next">
+          <input type="number" id="mission-add-target" class="sheet-input target-input"
+                 value="3" min="1" max="99" inputmode="numeric" aria-label="주간 목표 횟수">
+          <span class="target-unit">회</span>
+          <button type="submit" class="btn btn-primary">추가</button>
+        </form>
+        <div class="archived" id="mission-archived" hidden>
+          <button type="button" class="archived-toggle" id="mission-archived-toggle" aria-expanded="false">
+            보관한 미션 <span id="mission-archived-count">0</span>개 <span aria-hidden="true">▾</span>
+          </button>
+          <ul class="archived-list" id="mission-archived-list" hidden></ul>
+        </div>
+      </div>
+
       <div class="card placeholder">
         <span class="placeholder-emoji">🪴</span>
-        미션 · 데일리 루틴은 이어서 추가할 예정이에요
+        데일리 루틴은 이어서 추가할 예정이에요
       </div>
     </section>
 
@@ -296,6 +317,11 @@
       <label for="tracker-name">이름</label>
       <input type="text" id="tracker-name" class="sheet-input" maxlength="50" enterkeyhint="done">
     </div>
+    <div class="field" id="tracker-target-field" hidden>
+      <label for="tracker-target">목표 횟수 (회)</label>
+      <input type="number" id="tracker-target" class="sheet-input" min="1" max="99" inputmode="numeric">
+      <p class="field-hint" id="tracker-target-hint"></p>
+    </div>
     <p class="field-hint" id="tracker-sheet-hint"></p>
     <div class="sheet-actions">
       <button type="button" class="btn btn-danger" id="tracker-delete">삭제</button>
@@ -331,7 +357,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=10" defer></script>
-  <script src="app.js?v=10" defer></script>
+  <script src="db.js?v=11" defer></script>
+  <script src="app.js?v=11" defer></script>
 </body>
 </html>

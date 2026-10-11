@@ -780,6 +780,115 @@ const DB = (function () {
     });
   }
 
+  // ---------- 트래커: 주간 미션 ----------
+  // 미션: { id, name, startWeek, archivedWeek, targetHistory: [{ fromWeek, target }], createdAt, updatedAt }
+  //   targetHistory: 'fromWeek 주부터 목표 target회'. 이번 주에서 목표를 바꾸면 새 항목이 추가되어
+  //   지난 주들의 목표는 바뀌지 않음
+  // 주별 목표 고침: missionTargets { id: 'missionId|weekStart', missionId, weekStart, target }
+  //   지난 주의 목표만 따로 고칠 때 사용 (그 주에만 적용)
+  // 실천 기록: missionLogs { id, missionId, weekStart, date(없으면 null), createdAt }  ← 실천 1회 = 기록 1개
+
+  function getMissions() {
+    return run(['missions'], 'readonly', (tx) => tx.objectStore('missions').getAll())
+      .then((list) => list.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+  }
+
+  function addMission(name, target, startWeek) {
+    const now = nowISO();
+    const mission = {
+      id: newId(), name: name, startWeek: startWeek, archivedWeek: null,
+      targetHistory: [{ fromWeek: startWeek, target: target }],
+      createdAt: now, updatedAt: now
+    };
+    return run(['missions'], 'readwrite', (tx) => {
+      tx.objectStore('missions').add(mission);
+      return mission;
+    });
+  }
+
+  // changes: { name } / { archivedWeek } / { targetFrom: { week, target } }
+  //   targetFrom: week 주부터 앞으로의 목표를 바꿈 (그 이전 주는 그대로)
+  function updateMission(id, changes) {
+    return run(['missions'], 'readwrite', (tx) => {
+      const store = tx.objectStore('missions');
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const m = req.result;
+        if (!m) { tx.abort(); return; }
+        if ('name' in changes) m.name = changes.name;
+        if ('archivedWeek' in changes) m.archivedWeek = changes.archivedWeek;
+        if (changes.targetFrom) {
+          const tf = changes.targetFrom;
+          m.targetHistory = (m.targetHistory || [])
+            .filter((h) => h.fromWeek < tf.week)
+            .concat([{ fromWeek: tf.week, target: tf.target }]);
+        }
+        m.updatedAt = nowISO();
+        store.put(m);
+      };
+    });
+  }
+
+  // 지난 주 하나의 목표만 고치기
+  function setMissionWeekTarget(missionId, weekStart, target) {
+    return run(['missionTargets'], 'readwrite', (tx) => {
+      tx.objectStore('missionTargets').put({
+        id: missionId + '|' + weekStart, missionId: missionId, weekStart: weekStart,
+        target: target, updatedAt: nowISO()
+      });
+    });
+  }
+
+  // 한 주의 미션 데이터: { targets: { missionId: target }, logs: [...] }
+  function getMissionWeek(weekStart) {
+    return run(['missionTargets', 'missionLogs'], 'readonly', (tx) => {
+      const out = { targets: {}, logs: [] };
+      const t = tx.objectStore('missionTargets').index('weekStart').getAll(weekStart);
+      t.onsuccess = () => t.result.forEach((r) => { out.targets[r.missionId] = r.target; });
+      const l = tx.objectStore('missionLogs').getAll();
+      l.onsuccess = () => { out.logs = l.result.filter((r) => r.weekStart === weekStart); };
+      return out;
+    });
+  }
+
+  function addMissionLog(missionId, weekStart, date) {
+    return run(['missionLogs'], 'readwrite', (tx) => {
+      tx.objectStore('missionLogs').add({
+        id: newId(), missionId: missionId, weekStart: weekStart,
+        date: date || null, createdAt: nowISO()
+      });
+    });
+  }
+
+  // 그 주의 가장 최근 실천 기록 1개 삭제 (− 버튼)
+  function removeLastMissionLog(missionId, weekStart) {
+    return run(['missionLogs'], 'readwrite', (tx) => {
+      const store = tx.objectStore('missionLogs');
+      const req = store.index('missionId').getAll(missionId);
+      req.onsuccess = () => {
+        const mine = req.result.filter((r) => r.weekStart === weekStart)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        if (mine.length) store.delete(mine[0].id);
+      };
+    });
+  }
+
+  function countMissionLogs(id) {
+    return run(['missionLogs'], 'readonly', (tx) => tx.objectStore('missionLogs').index('missionId').count(id));
+  }
+
+  // 완전 삭제: 미션 + 주별 목표 + 실천 기록
+  function deleteMission(id) {
+    return run(['missions', 'missionTargets', 'missionLogs'], 'readwrite', (tx) => {
+      tx.objectStore('missions').delete(id);
+      ['missionTargets', 'missionLogs'].forEach((name) => {
+        const store = tx.objectStore(name);
+        const req = store.index('missionId').getAllKeys(id);
+        req.onsuccess = () => req.result.forEach((key) => store.delete(key));
+      });
+    });
+  }
+
   // ---------- 설정 ----------
 
   function getSetting(key) {
@@ -827,7 +936,16 @@ const DB = (function () {
     deleteHabit: deleteHabit,
     countHabitLogs: countHabitLogs,
     getHabitLogs: getHabitLogs,
-    setHabitLog: setHabitLog
+    setHabitLog: setHabitLog,
+    getMissions: getMissions,
+    addMission: addMission,
+    updateMission: updateMission,
+    setMissionWeekTarget: setMissionWeekTarget,
+    getMissionWeek: getMissionWeek,
+    addMissionLog: addMissionLog,
+    removeLastMissionLog: removeLastMissionLog,
+    countMissionLogs: countMissionLogs,
+    deleteMission: deleteMission
   };
 
 })();

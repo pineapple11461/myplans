@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v10';
+  const APP_VERSION = 'v11';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -40,6 +40,9 @@
   let habits = [];                 // 모든 습관 (보관한 것 포함)
   let habitLogMap = {};            // 'habitId|date' → 'done' | 'not_done'
   let habitArchivedOpen = false;   // 보관한 습관 목록 펼침 상태
+  let missions = [];               // 모든 미션 (보관한 것 포함)
+  let missionWeek = { targets: {}, logs: [] };   // 보고 있는 주의 미션 목표 고침·실천 기록
+  let missionArchivedOpen = false;
   let trackerEditing = null;       // 트래커 수정창 상태: { kind: 'habit', item }
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
@@ -525,12 +528,16 @@
     const results = await Promise.all([
       DB.getWeeklyGoals(trackerWeek),
       DB.getHabits(),
-      DB.getHabitLogs(trackerWeek)
+      DB.getHabitLogs(trackerWeek),
+      DB.getMissions(),
+      DB.getMissionWeek(trackerWeek)
     ]);
     weeklyGoals = results[0];
     habits = results[1];
     habitLogMap = {};
     results[2].forEach((log) => { habitLogMap[log.id] = log.state; });
+    missions = results[3];
+    missionWeek = results[4];
     renderTracker();
   }
 
@@ -538,6 +545,7 @@
     renderWeekNav();
     renderGoals();
     renderHabits();
+    renderMissions();
   }
 
   function renderWeekNav() {
@@ -859,16 +867,240 @@
     }
   }
 
-  // ----- 트래커 항목 수정창 (습관용, 이후 미션·루틴도 함께 사용) -----
+  // ----- 주간 미션 -----
+
+  // 이 주에 보일 미션 (습관과 같은 규칙)
+  function missionsForWeek(week) {
+    return missions.filter((m) =>
+      (m.startWeek || '') <= week && (!m.archivedWeek || week < m.archivedWeek));
+  }
+
+  // 그 주의 목표 횟수: 그 주만 고친 값이 있으면 그것, 없으면 그 주에 적용 중인 목표
+  function missionTarget(mission, week) {
+    if (missionWeek.targets[mission.id] != null && week === trackerWeek) {
+      return missionWeek.targets[mission.id];
+    }
+    let target = 1;
+    (mission.targetHistory || []).forEach((h) => {
+      if (h.fromWeek <= week) target = h.target;
+    });
+    return target;
+  }
+
+  function missionCount(mission) {
+    return missionWeek.logs.filter((l) => l.missionId === mission.id).length;
+  }
+
+  function renderMissions() {
+    const thisWeek = DB.weekStartOf(todayStr);
+    const isFuture = trackerWeek > thisWeek;
+    const visible = missionsForWeek(trackerWeek);
+    const list = $('mission-list');
+    list.innerHTML = '';
+
+    visible.forEach((m) => {
+      const target = missionTarget(m, trackerWeek);
+      const count = missionCount(m);
+      const achieved = count >= target;
+
+      const li = document.createElement('li');
+      li.className = 'mission-item' + (achieved ? ' is-achieved' : '');
+
+      const top = document.createElement('div');
+      top.className = 'mission-top';
+      const name = document.createElement('button');
+      name.type = 'button';
+      name.className = 'mission-name';
+      name.textContent = m.name;
+      name.addEventListener('click', () => openTrackerSheet('mission', m));
+      const cnt = document.createElement('span');
+      cnt.className = 'mission-count';
+      cnt.textContent = count + '/' + target + '회' + (achieved ? ' 달성 🎉' : '');
+      top.appendChild(name);
+      top.appendChild(cnt);
+
+      const bottom = document.createElement('div');
+      bottom.className = 'mission-bottom';
+      const bar = document.createElement('div');
+      bar.className = 'mission-bar';
+      const fill = document.createElement('div');
+      fill.className = 'mission-fill';
+      fill.style.width = Math.min(100, Math.round((count / target) * 100)) + '%';
+      bar.appendChild(fill);
+
+      const minus = document.createElement('button');
+      minus.type = 'button';
+      minus.className = 'mbtn';
+      minus.textContent = '−';
+      minus.disabled = count === 0;
+      minus.setAttribute('aria-label', m.name + ' 실천 1회 빼기');
+      minus.addEventListener('click', () => changeMissionCount(m, -1));
+
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.className = 'mbtn mbtn-plus';
+      plus.textContent = '+';
+      plus.disabled = isFuture;                      // 미래 주에는 기록 불가
+      plus.setAttribute('aria-label', m.name + ' 실천 1회 더하기');
+      plus.addEventListener('click', () => changeMissionCount(m, 1));
+
+      bottom.appendChild(bar);
+      bottom.appendChild(minus);
+      bottom.appendChild(plus);
+
+      li.appendChild(top);
+      li.appendChild(bottom);
+      list.appendChild(li);
+    });
+    $('mission-empty').hidden = visible.length > 0;
+
+    renderArchivedSection('mission', missions.filter((m) => m.archivedWeek), missionArchivedOpen,
+      (m) => setTrackerArchived('mission', m, false),
+      (m) => deleteTrackerFully('mission', m));
+  }
+
+  // 보관한 항목 목록 그리기 (미션용. prefix: id 앞부분)
+  function renderArchivedSection(prefix, items, open, onRestore, onDelete) {
+    $(prefix + '-archived').hidden = items.length === 0;
+    $(prefix + '-archived-count').textContent = String(items.length);
+    $(prefix + '-archived-toggle').setAttribute('aria-expanded', String(open));
+    const alist = $(prefix + '-archived-list');
+    alist.hidden = !open;
+    alist.innerHTML = '';
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'archived-name';
+      name.textContent = item.name;
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.className = 'btn btn-soft archived-btn';
+      restore.textContent = '보관 해제';
+      restore.addEventListener('click', () => onRestore(item));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-danger archived-btn';
+      del.textContent = '삭제';
+      del.addEventListener('click', () => onDelete(item));
+      li.appendChild(name);
+      li.appendChild(restore);
+      li.appendChild(del);
+      alist.appendChild(li);
+    });
+  }
+
+  // + / − : 실천 기록 1개 추가 / 가장 최근 기록 1개 삭제
+  async function changeMissionCount(mission, delta) {
+    if (busy) return;
+    const thisWeek = DB.weekStartOf(todayStr);
+    busy = true;
+    try {
+      if (delta > 0) {
+        // 이번 주면 오늘 날짜, 지난 주면 날짜 없이 그 주의 기록으로 저장
+        await DB.addMissionLog(mission.id, trackerWeek, trackerWeek === thisWeek ? todayStr : null);
+      } else {
+        await DB.removeLastMissionLog(mission.id, trackerWeek);
+      }
+      await loadTracker();
+    } catch (err) {
+      showError('미션 기록을 저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addMission(event) {
+    event.preventDefault();
+    if (busy) return;
+    const input = $('mission-add-input');
+    const targetInput = $('mission-add-target');
+    const name = input.value.trim();
+    const target = parseInt(targetInput.value, 10);
+    if (!name) { shake(input); return; }
+    if (!(target >= 1 && target <= 99)) { shake(targetInput); return; }
+    const thisWeek = DB.weekStartOf(todayStr);
+    const startWeek = trackerWeek < thisWeek ? trackerWeek : thisWeek;
+    busy = true;
+    try {
+      await DB.addMission(name, target, startWeek);
+      input.value = '';
+      targetInput.value = '3';
+      await loadTracker();
+    } catch (err) {
+      showError('미션을 저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ----- 보관 / 완전 삭제 (습관·미션 공통으로 호출) -----
+  function setTrackerArchived(kind, item, archive) {
+    if (kind === 'habit') return setHabitArchived(item, archive);
+    return setMissionArchived(item, archive);
+  }
+  function deleteTrackerFully(kind, item) {
+    if (kind === 'habit') return deleteHabitFully(item);
+    return deleteMissionFully(item);
+  }
+
+  async function setMissionArchived(mission, archive) {
+    if (busy) return;
+    busy = true;
+    try {
+      await DB.updateMission(mission.id, { archivedWeek: archive ? DB.weekStartOf(todayStr) : null });
+      closeSheet();
+      await loadTracker();
+      showToast(archive ? '\'' + mission.name + '\'을(를) 보관했어요' : '보관을 해제했어요');
+    } catch (err) {
+      showError('저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function deleteMissionFully(mission) {
+    if (busy) return;
+    try {
+      const count = await DB.countMissionLogs(mission.id);
+      let msg = '\'' + mission.name + '\' 미션을 완전히 삭제할까요?';
+      if (count > 0) msg += '\n\n실천 기록 ' + count + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      msg += '\n\n기록을 남기고 목록에서만 빼려면 \'보관\'을 사용하세요.';
+      if (!confirm(msg)) return;
+      busy = true;
+      await DB.deleteMission(mission.id);
+      closeSheet();
+      await loadTracker();
+      showToast('삭제했어요');
+    } catch (err) {
+      showError('삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ----- 트래커 항목 수정창 (습관·미션 공통) -----
   function openTrackerSheet(kind, item) {
     trackerEditing = { kind: kind, item: item };
     const isArchived = !!item.archivedWeek;
-    $('tracker-sheet-title').textContent = '습관 수정';
+    const label = kind === 'habit' ? '습관' : '미션';
+    $('tracker-sheet-title').textContent = label + ' 수정';
     $('tracker-name').value = item.name;
     $('tracker-archive').textContent = isArchived ? '보관 해제' : '보관';
     $('tracker-sheet-hint').textContent = isArchived
-      ? '보관 중인 습관이에요'
-      : '보관하면 이번 주부터 표에서 사라지고, 지난 기록은 그대로 남아요';
+      ? '보관 중인 ' + label + '이에요'
+      : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
+
+    // 미션만: 목표 횟수
+    const isMission = kind === 'mission';
+    $('tracker-target-field').hidden = !isMission;
+    if (isMission) {
+      const thisWeek = DB.weekStartOf(todayStr);
+      $('tracker-target').value = String(missionTarget(item, trackerWeek));
+      $('tracker-target-hint').textContent = trackerWeek < thisWeek
+        ? '지난 주를 보고 있어요. 바꾸면 이 주의 목표만 바뀌어요'
+        : '바꾸면 이 주부터 앞으로 적용돼요 (지난 주 목표는 그대로)';
+    }
+
     hideToast();
     $('sheet-backdrop').classList.add('open');
     $('tracker-sheet').classList.add('open');
@@ -877,15 +1109,36 @@
   async function submitTrackerSheet(event) {
     event.preventDefault();
     if (busy || !trackerEditing) return;
+    const kind = trackerEditing.kind;
+    const item = trackerEditing.item;
     const input = $('tracker-name');
     const name = input.value.trim();
     if (!name) { shake(input); return; }
-    const item = trackerEditing.item;
-    if (name === item.name) { closeSheet(); return; }
+
+    let newTarget = null;
+    if (kind === 'mission') {
+      const t = parseInt($('tracker-target').value, 10);
+      if (!(t >= 1 && t <= 99)) { shake($('tracker-target')); return; }
+      if (t !== missionTarget(item, trackerWeek)) newTarget = t;
+    }
+    if (name === item.name && newTarget === null) { closeSheet(); return; }
+
     busy = true;
     try {
-      // 이름을 바꾸면 지난 주의 표에도 새 이름으로 보임 (기록은 그대로)
-      await DB.updateHabit(item.id, { name: name });
+      // 이름을 바꾸면 지난 주에도 새 이름으로 보임 (기록은 그대로)
+      if (kind === 'habit') {
+        await DB.updateHabit(item.id, { name: name });
+      } else {
+        if (name !== item.name) await DB.updateMission(item.id, { name: name });
+        if (newTarget !== null) {
+          const thisWeek = DB.weekStartOf(todayStr);
+          if (trackerWeek < thisWeek) {
+            await DB.setMissionWeekTarget(item.id, trackerWeek, newTarget);   // 지난 주: 그 주만
+          } else {
+            await DB.updateMission(item.id, { targetFrom: { week: trackerWeek, target: newTarget } });
+          }
+        }
+      }
       closeSheet();
       await loadTracker();
     } catch (err) {
@@ -1352,11 +1605,16 @@
     $('tracker-archive').addEventListener('click', () => {
       if (trackerEditing) {
         const item = trackerEditing.item;
-        setHabitArchived(item, !item.archivedWeek);
+        setTrackerArchived(trackerEditing.kind, item, !item.archivedWeek);
       }
     });
     $('tracker-delete').addEventListener('click', () => {
-      if (trackerEditing) deleteHabitFully(trackerEditing.item);
+      if (trackerEditing) deleteTrackerFully(trackerEditing.kind, trackerEditing.item);
+    });
+    $('mission-add-form').addEventListener('submit', addMission);
+    $('mission-archived-toggle').addEventListener('click', () => {
+      missionArchivedOpen = !missionArchivedOpen;
+      renderMissions();
     });
 
     // 달력

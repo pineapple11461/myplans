@@ -798,3 +798,77 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 }
 .archived-name { flex: 1; color: var(--muted); word-break: break-all; }
 .archived-btn { flex: none; font-size: 0.8rem; padding: 6px 10px; }
+
+/* =========================================
+   7-3단계 추가: 주간 미션
+   ========================================= */
+
+.mission-list { list-style: none; }
+.mission-item {
+  padding: 10px 0;
+  border-top: 1px dashed var(--line);
+}
+.mission-item:first-child { border-top: none; }
+
+.mission-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mission-name {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font-size: 0.98rem;
+  word-break: break-all;
+  cursor: pointer;
+}
+.mission-count {
+  flex: none;
+  font-size: 0.88rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mission-item.is-achieved .mission-count { color: var(--pink-dark); font-weight: 700; }
+
+.mission-bottom { display: flex; align-items: center; gap: 8px; }
+.mission-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: #F5EEE9;
+  overflow: hidden;
+}
+.mission-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--pink);
+  transition: width 0.25s ease;
+}
+.mission-item.is-achieved .mission-fill { background: #8FCFB5; }
+
+.mbtn {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.mbtn-plus { border: none; background: var(--pink); color: #fff; }
+.mbtn:disabled { opacity: 0.35; cursor: default; }
+
+/* 미션 추가줄의 목표 횟수 칸 */
+.inline-add .target-input { flex: none; width: 56px; text-align: center; padding: 10px 6px; }
+.target-unit { align-self: center; color: var(--muted); font-size: 0.9rem; margin-left: -4px; }
