@@ -48,9 +48,26 @@
       <header class="screen-header">
         <h1 class="screen-title">📋 전체 할 일</h1>
       </header>
-      <div class="card placeholder">
-        <span class="placeholder-emoji">🧺</span>
-        3단계에서 만들 예정이에요
+
+      <!-- 카테고리 필터 (app.js가 버튼을 채움) -->
+      <div class="chip-row" id="category-filter" role="group" aria-label="카테고리 필터"></div>
+
+      <div class="card card-overdue">
+        <h2 class="card-title">⏳ 기한 지난 할 일 <span class="count" id="count-overdue"></span></h2>
+        <ul class="task-list" id="list-overdue"></ul>
+        <p class="empty" id="empty-overdue">기한 지난 할 일이 없어요 👍</p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">📌 예정된 할 일 <span class="count" id="count-upcoming"></span></h2>
+        <ul class="task-list" id="list-upcoming"></ul>
+        <p class="empty" id="empty-upcoming">예정된 할 일이 없어요</p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">🗂️ 날짜 없는 할 일 <span class="count" id="count-nodate"></span></h2>
+        <ul class="task-list" id="list-nodate"></ul>
+        <p class="empty" id="empty-nodate">날짜 없는 할 일이 없어요</p>
       </div>
     </section>
 
@@ -104,6 +121,63 @@
       <button type="submit" class="btn btn-primary">저장</button>
     </div>
   </form>
+
+  <!-- 할 일 추가·수정: 아래에서 올라오는 입력창 -->
+  <form class="sheet sheet-tall" id="edit-sheet" autocomplete="off" novalidate>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 class="sheet-label" id="edit-heading">할 일 수정</h2>
+
+    <div class="field">
+      <label for="edit-title">제목</label>
+      <input type="text" id="edit-title" class="sheet-input" maxlength="100" enterkeyhint="done">
+    </div>
+
+    <div class="field">
+      <label for="edit-category">카테고리</label>
+      <select id="edit-category" class="sheet-input"></select>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="edit-date">날짜</label>
+        <div class="input-clear">
+          <input type="date" id="edit-date" class="sheet-input">
+          <button type="button" class="clear-btn" data-clear="edit-date" aria-label="날짜 지우기">✕</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="edit-time">시간</label>
+        <div class="input-clear">
+          <input type="time" id="edit-time" class="sheet-input">
+          <button type="button" class="clear-btn" data-clear="edit-time" aria-label="시간 지우기">✕</button>
+        </div>
+      </div>
+    </div>
+    <p class="field-hint" id="edit-date-hint"></p>
+
+    <div class="field" id="edit-completed-field" hidden>
+      <label for="edit-completed">실제 완료일</label>
+      <input type="date" id="edit-completed" class="sheet-input">
+    </div>
+
+    <div class="field">
+      <label for="edit-memo">메모</label>
+      <textarea id="edit-memo" class="sheet-input" rows="3" maxlength="1000"></textarea>
+    </div>
+
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-danger" id="edit-delete">삭제</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost" id="edit-cancel">취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
+
+  <!-- 잠깐 나타나는 알림 띠 (되돌리기 버튼 포함) -->
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span id="toast-text"></span>
+    <button type="button" class="toast-action" id="toast-action" hidden></button>
+  </div>
 
   <!-- 하단 메뉴 -->
   <nav class="bottom-nav" aria-label="주요 화면">

@@ -151,15 +151,17 @@ const DB = (function () {
 
   // ---------- 할 일 ----------
 
-  // 빠른 추가: 할 일 1개 + 회차 기록 1개를 한 번에 저장
-  // dateStr: 'YYYY-MM-DD' 또는 null(날짜 없음)
-  function addQuickTask(title, dateStr) {
+  // 새 할 일: 할 일 1개 + 회차 기록 1개를 한 번에 저장
+  // fields: { title, categoryId, memo, date, time }
+  //   date: 'YYYY-MM-DD' 또는 null(날짜 없음), time: 'HH:MM' 또는 null
+  function addTask(fields) {
     const now = nowISO();
+    const date = fields.date || null;
     const task = {
       id: newId(),
-      title: title,
-      categoryId: null,
-      memo: '',
+      title: fields.title,
+      categoryId: fields.categoryId || null,
+      memo: fields.memo || '',
       createdAt: now,
       updatedAt: now
     };
@@ -167,9 +169,9 @@ const DB = (function () {
       id: newId(),
       taskId: task.id,
       ruleId: null,               // 반복 규칙 없음 (4단계에서 사용)
-      originalDate: dateStr,      // 원래 예정일
-      scheduledDate: dateStr,     // 변경된 예정일 (변경 전에는 원래 예정일과 같음)
-      time: null,                 // 'HH:MM' 또는 null
+      originalDate: date,         // 원래 예정일
+      scheduledDate: date,        // 변경된 예정일 (변경 전에는 원래 예정일과 같음)
+      time: date ? (fields.time || null) : null,   // 날짜가 없으면 시간도 없음
       status: 'pending',          // 'pending' | 'done' | 'skipped'
       completedDate: null,        // 실제 완료일
       createdAt: now,
@@ -183,9 +185,14 @@ const DB = (function () {
     });
   }
 
-  // 특정 날짜의 회차 + 해당 할 일 정보를 함께 가져오기
+  // 빠른 추가: 제목과 날짜만
+  function addQuickTask(title, dateStr) {
+    return addTask({ title: title, date: dateStr });
+  }
+
+  // 회차 색인으로 찾은 회차 + 해당 할 일 정보를 함께 가져오기
   // 돌려주는 값: [{ occurrence, task }, ...]
-  async function getItemsByDate(dateStr) {
+  async function getItemsByIndex(indexName, key) {
     const db = await open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(['occurrences', 'tasks'], 'readonly');
@@ -193,7 +200,7 @@ const DB = (function () {
       tx.oncomplete = () => resolve(items);
       tx.onerror = () => reject(tx.error);
 
-      const req = tx.objectStore('occurrences').index('scheduledDate').getAll(dateStr);
+      const req = tx.objectStore('occurrences').index(indexName).getAll(key);
       req.onsuccess = () => {
         req.result.forEach((occ) => {
           const tReq = tx.objectStore('tasks').get(occ.taskId);
@@ -203,6 +210,97 @@ const DB = (function () {
         });
       };
     });
+  }
+
+  // 특정 날짜(변경된 예정일 기준)의 회차
+  function getItemsByDate(dateStr) {
+    return getItemsByIndex('scheduledDate', dateStr);
+  }
+
+  // 미완료 회차 전체 (전체 할 일 화면용)
+  function getPendingItems() {
+    return getItemsByIndex('status', 'pending');
+  }
+
+  // 회차 1개 + 할 일 정보 (없으면 null)
+  async function getItem(occurrenceId) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['occurrences', 'tasks'], 'readonly');
+      let item = null;
+      tx.oncomplete = () => resolve(item);
+      tx.onerror = () => reject(tx.error);
+
+      const req = tx.objectStore('occurrences').get(occurrenceId);
+      req.onsuccess = () => {
+        const occ = req.result;
+        if (!occ) return;
+        const tReq = tx.objectStore('tasks').get(occ.taskId);
+        tReq.onsuccess = () => {
+          if (tReq.result) item = { occurrence: occ, task: tReq.result };
+        };
+      };
+    });
+  }
+
+  // 할 일 수정 (할 일 정보 + 회차 정보를 한 번에 저장)
+  // fields: { title, categoryId, memo, date, time, completedDate }
+  // 날짜 규칙:
+  //   - 처음으로 날짜를 정하는 경우(원래 예정일이 없음): 원래 예정일 = 변경된 예정일 = 새 날짜
+  //   - 이미 원래 예정일이 있으면: 변경된 예정일만 바꾸고 원래 예정일은 보존
+  // 실제 완료일은 완료된 회차에서만 바꿈
+  function updateItem(occurrenceId, fields) {
+    return run(['occurrences', 'tasks'], 'readwrite', (tx) => {
+      const occStore = tx.objectStore('occurrences');
+      const taskStore = tx.objectStore('tasks');
+      const now = nowISO();
+
+      const req = occStore.get(occurrenceId);
+      req.onsuccess = () => {
+        const occ = req.result;
+        if (!occ) { tx.abort(); return; }
+
+        const tReq = taskStore.get(occ.taskId);
+        tReq.onsuccess = () => {
+          const task = tReq.result;
+          if (!task) { tx.abort(); return; }
+          task.title = fields.title;
+          task.categoryId = fields.categoryId || null;
+          task.memo = fields.memo || '';
+          task.updatedAt = now;
+          taskStore.put(task);
+        };
+
+        const newDate = fields.date || null;
+        if (occ.originalDate === null) occ.originalDate = newDate;
+        occ.scheduledDate = newDate;
+        occ.time = newDate ? (fields.time || null) : null;
+        if (occ.status === 'done' && fields.completedDate) {
+          occ.completedDate = fields.completedDate;
+        }
+        occ.updatedAt = now;
+        occStore.put(occ);
+      };
+    });
+  }
+
+  // 할 일 삭제: 할 일 + 모든 회차 + 반복 규칙을 한 번에 삭제
+  function deleteTask(taskId) {
+    return run(['tasks', 'occurrences', 'rules'], 'readwrite', (tx) => {
+      tx.objectStore('tasks').delete(taskId);
+      ['occurrences', 'rules'].forEach((name) => {
+        const store = tx.objectStore(name);
+        const req = store.index('taskId').getAllKeys(taskId);
+        req.onsuccess = () => req.result.forEach((key) => store.delete(key));
+      });
+    });
+  }
+
+  // 할 일의 완료 기록 개수 (삭제 확인 메시지용)
+  function countDoneOccurrences(taskId) {
+    return run(['occurrences'], 'readonly',
+      (tx) => tx.objectStore('occurrences').index('taskId').getAll(taskId))
+      .then((list) => list.filter((o) => o.status === 'done').length);
   }
 
   // 회차 완료 / 완료 취소
@@ -233,15 +331,27 @@ const DB = (function () {
       .then((row) => (row ? row.value : undefined));
   }
 
+  // 카테고리 목록 [{ id, name }, ...]
+  function getCategories() {
+    return getSetting('categories').then((list) => list || DEFAULT_CATEGORIES);
+  }
+
   // ---------- 공개 ----------
   return {
     open: open,
     requestPersist: requestPersist,
     toDateStr: toDateStr,
+    addTask: addTask,
     addQuickTask: addQuickTask,
     getItemsByDate: getItemsByDate,
+    getPendingItems: getPendingItems,
+    getItem: getItem,
+    updateItem: updateItem,
     setOccurrenceDone: setOccurrenceDone,
-    getSetting: getSetting
+    deleteTask: deleteTask,
+    countDoneOccurrences: countDoneOccurrences,
+    getSetting: getSetting,
+    getCategories: getCategories
   };
 
 })();

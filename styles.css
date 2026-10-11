@@ -273,3 +273,147 @@ button, input { font: inherit; color: inherit; }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
 }
+
+/* =========================================
+   3단계 추가: 할 일 상세, 전체 할 일, 수정 입력창, 알림 띠
+   ========================================= */
+
+/* ---------- 할 일 한 줄: 누르면 수정창이 열리는 부분 ---------- */
+.task-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.task-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.meta-overdue { color: var(--pink-dark); }
+.meta-chip {
+  background: #F5EEE9;
+  border-radius: 8px;
+  padding: 0 7px;
+}
+
+/* ---------- 전체 할 일 화면 ---------- */
+.chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 2px 14px;
+  margin: 0 -2px;
+  scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chip.active {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+}
+
+.count { color: var(--muted); font-size: 0.9rem; font-weight: 400; }
+.card-overdue { border-color: #F6D3DB; }
+
+/* ---------- 수정 입력창 ---------- */
+.sheet-tall {
+  max-height: 88vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.field { margin-bottom: 12px; flex: 1; min-width: 0; }
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.field-row { display: flex; gap: 10px; }
+.field-row .field { margin-bottom: 4px; }
+.field-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+  min-height: 1em;
+}
+
+select.sheet-input { appearance: auto; }
+textarea.sheet-input { resize: vertical; line-height: 1.5; }
+.sheet-input:disabled { opacity: 0.45; }
+
+/* 날짜·시간 칸 오른쪽의 지우기(✕) 버튼 */
+.input-clear { position: relative; }
+.input-clear .sheet-input { padding-right: 34px; }
+.clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.clear-btn:disabled { visibility: hidden; }
+
+.spacer { flex: 1; }
+.btn-danger { background: none; color: var(--pink-dark); padding-left: 4px; padding-right: 4px; }
+
+/* ---------- 알림 띠 ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--nav-h) + 90px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 20px);
+  max-width: calc(100% - 32px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--text);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 16px;
+  font-size: 0.92rem;
+  box-shadow: 0 6px 18px rgba(74, 63, 58, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+  z-index: 60;
+}
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--pink);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}

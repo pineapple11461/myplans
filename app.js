@@ -20,6 +20,15 @@
 
   let doneExpanded = false;   // 완료 목록 펼침 상태
 
+  // 전체 할 일 화면 데이터
+  let pendingItems = [];      // 미완료 회차 전체 [{ occurrence, task }, ...]
+  let tasksFilter = 'all';    // 'all' 또는 카테고리 id
+  let categories = [];        // [{ id, name }, ...]
+
+  let currentScreen = 'today';
+  let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
+  let toastTimer = null;
+
   function showError(message, err) {
     if (err) console.error(err);
     alert('⚠️ ' + message);
@@ -29,6 +38,59 @@
   function fillList(listEl, items) {
     listEl.innerHTML = '';
     items.forEach((el) => listEl.appendChild(el));
+  }
+
+  // 정렬 기준
+  function byCreated(a, b) {
+    return a.occurrence.createdAt.localeCompare(b.occurrence.createdAt);
+  }
+  // 같은 날짜 안에서는 시간 지정 일정이 먼저, 그다음 시간 없는 일
+  function byTime(a, b) {
+    return (a.occurrence.time || '99:99').localeCompare(b.occurrence.time || '99:99');
+  }
+  function byDateTime(a, b) {
+    return a.occurrence.scheduledDate.localeCompare(b.occurrence.scheduledDate) ||
+      byTime(a, b) || byCreated(a, b);
+  }
+
+  function categoryName(id) {
+    const c = categories.find((cat) => cat.id === id);
+    return c ? c.name : '';
+  }
+
+  // 'YYYY-MM-DD' → '10월 12일 (월)' (올해가 아니면 연도도 표시)
+  function formatShortDate(str) {
+    const parts = str.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    const wd = '일월화수목금토'[d.getDay()];
+    const yearPart = parts[0] !== new Date().getFullYear() ? parts[0] + '년 ' : '';
+    return yearPart + parts[1] + '월 ' + parts[2] + '일 (' + wd + ')';
+  }
+
+  // 입력칸 흔들기 (필수 입력 안내)
+  function shake(input) {
+    input.classList.remove('shake');
+    void input.offsetWidth;          // 애니메이션 다시 시작
+    input.classList.add('shake');
+    input.focus();
+  }
+
+  // 잠깐 나타나는 알림 띠. actionLabel/onAction을 주면 버튼이 생김
+  function showToast(text, actionLabel, onAction) {
+    const toast = $('toast');
+    const btn = $('toast-action');
+    $('toast-text').textContent = text;
+    btn.hidden = !actionLabel;
+    btn.textContent = actionLabel || '';
+    btn.onclick = actionLabel ? () => { hideToast(); onAction(); } : null;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 4000);
+  }
+  function hideToast() {
+    clearTimeout(toastTimer);
+    $('toast').classList.remove('show');
+    $('toast-action').onclick = null;
   }
 
   // ---------- 오늘 날짜 ----------
@@ -54,15 +116,19 @@
       else btn.removeAttribute('aria-current');
     });
 
-    // '+' 버튼은 오늘 화면에서만 보임
-    $('fab-add').hidden = name !== 'today';
-    if (name !== 'today') closeSheet();
+    // '+' 버튼은 오늘 화면과 전체 할 일 화면에서만 보임
+    currentScreen = name;
+    $('fab-add').hidden = !(name === 'today' || name === 'tasks');
+    closeSheet();
+    hideToast();
 
     window.scrollTo(0, 0);
   }
 
   // ---------- 할 일 한 줄 만들기 ----------
-  function createTaskItem(item) {
+  // showMeta: true면 제목 아래에 날짜·카테고리·메모 표시 (전체 할 일 화면용)
+  //           false면 시간만 제목 앞에 표시 (오늘 화면용, 카테고리 숨김)
+  function createTaskItem(item, showMeta) {
     const occ = item.occurrence;
     const isDone = occ.status === 'done';
 
@@ -74,37 +140,76 @@
     check.className = 'check';
     check.setAttribute('aria-label', isDone ? '완료 취소' : '완료');
     check.textContent = isDone ? '✓' : '';
-    check.addEventListener('click', () => toggleDone(occ.id));
+    // 전체 할 일 화면에서 완료하면 목록에서 사라지므로 되돌리기 알림을 띄움
+    check.addEventListener('click', () => setDone(item, !isDone, showMeta));
 
-    // 시간 지정 일정이면 시간 표시
-    if (occ.time) {
+    // 체크 버튼 외의 부분을 누르면 수정창이 열림
+    const body = document.createElement('div');
+    body.className = 'task-body';
+    body.setAttribute('role', 'button');
+    body.tabIndex = 0;
+    body.addEventListener('click', () => openEdit(occ.id));
+    body.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') openEdit(occ.id);
+    });
+
+    const main = document.createElement('div');
+    main.className = 'task-main';
+
+    if (occ.time && !showMeta) {
       const time = document.createElement('span');
       time.className = 'task-time';
       time.textContent = occ.time;
-      li.appendChild(check);
-      li.appendChild(time);
-    } else {
-      li.appendChild(check);
+      main.appendChild(time);
     }
 
     const title = document.createElement('span');
     title.className = 'task-title';
     title.textContent = item.task.title;   // textContent 사용: 입력한 글자가 HTML로 해석되지 않음
+    main.appendChild(title);
+    body.appendChild(main);
 
-    li.appendChild(title);
+    if (showMeta) {
+      const meta = document.createElement('div');
+      meta.className = 'task-meta';
+      const add = (text, cls) => {
+        const s = document.createElement('span');
+        if (cls) s.className = cls;
+        s.textContent = text;
+        meta.appendChild(s);
+      };
+
+      if (occ.scheduledDate) {
+        const overdue = occ.scheduledDate < todayStr;
+        const today = occ.scheduledDate === todayStr;
+        add((today ? '오늘' : formatShortDate(occ.scheduledDate)) +
+            (occ.time ? ' ' + occ.time : ''), overdue ? 'meta-overdue' : '');
+      }
+      if (occ.originalDate && occ.originalDate !== occ.scheduledDate) {
+        add('원래 ' + formatShortDate(occ.originalDate));
+      }
+      const cat = categoryName(item.task.categoryId);
+      if (cat) add(cat, 'meta-chip');
+      if (item.task.memo) add('📝');
+
+      if (meta.childNodes.length) body.appendChild(meta);
+    }
+
+    li.appendChild(check);
+    li.appendChild(body);
     return li;
   }
 
   // ---------- 오늘 화면 그리기 ----------
   function renderToday() {
-    const byCreated = (a, b) => a.occurrence.createdAt.localeCompare(b.occurrence.createdAt);
+    const row = (it) => createTaskItem(it, false);
 
     const pending = todayItems.filter((it) => it.occurrence.status === 'pending');
     const done = todayItems
       .filter((it) => it.occurrence.status === 'done')
       .sort(byCreated);
 
-    // 시간 지정 일정: 시간순 (시간 입력 기능은 3단계에서 추가)
+    // 시간 지정 일정: 시간순
     const timed = pending
       .filter((it) => it.occurrence.time)
       .sort((a, b) => a.occurrence.time.localeCompare(b.occurrence.time) || byCreated(a, b));
@@ -112,13 +217,13 @@
       .filter((it) => !it.occurrence.time)
       .sort(byCreated);
 
-    fillList($('list-timed'), timed.map(createTaskItem));
+    fillList($('list-timed'), timed.map(row));
     $('empty-timed').hidden = timed.length > 0;
 
-    fillList($('list-untimed'), untimed.map(createTaskItem));
+    fillList($('list-untimed'), untimed.map(row));
     $('empty-untimed').hidden = untimed.length > 0;
 
-    fillList($('list-done'), done.map(createTaskItem));
+    fillList($('list-done'), done.map(row));
     $('done-count').textContent = String(done.length);
     $('done-card').hidden = done.length === 0;
     if (done.length === 0) doneExpanded = false;
@@ -132,17 +237,26 @@
     renderToday();
   }
 
-  async function toggleDone(occurrenceId) {
-    if (busy) return;
-    const item = todayItems.find((it) => it.occurrence.id === occurrenceId);
-    if (!item) return;
+  async function loadTasks() {
+    pendingItems = await DB.getPendingItems();
+    renderTasks();
+  }
 
-    const makeDone = item.occurrence.status !== 'done';
+  // 데이터가 바뀐 뒤 두 화면을 모두 다시 그림
+  async function reloadAll() {
+    await Promise.all([loadToday(), loadTasks()]);
+  }
+
+  // 완료 / 완료 취소. 실제 완료일은 오늘 날짜로 자동 기록 (수정창에서 변경 가능)
+  async function setDone(item, makeDone, withUndo) {
+    if (busy) return;
     busy = true;
     try {
-      // 실제 완료일은 오늘 날짜로 기록 (수정 기능은 3단계에서 추가)
-      await DB.setOccurrenceDone(occurrenceId, makeDone, todayStr);
-      await loadToday();
+      await DB.setOccurrenceDone(item.occurrence.id, makeDone, todayStr);
+      await reloadAll();
+      if (withUndo && makeDone) {
+        showToast('완료했어요', '되돌리기', () => setDone(item, false, false));
+      }
     } catch (err) {
       showError('완료 상태를 저장하지 못했어요.', err);
     } finally {
@@ -155,6 +269,47 @@
     renderToday();
   }
 
+  // ---------- 전체 할 일 화면 그리기 ----------
+  function renderTasks() {
+    const row = (it) => createTaskItem(it, true);
+    const list = pendingItems.filter((it) =>
+      tasksFilter === 'all' || it.task.categoryId === tasksFilter);
+
+    const overdue = list
+      .filter((it) => it.occurrence.scheduledDate && it.occurrence.scheduledDate < todayStr)
+      .sort(byDateTime);
+    const upcoming = list
+      .filter((it) => it.occurrence.scheduledDate && it.occurrence.scheduledDate >= todayStr)
+      .sort(byDateTime);
+    const nodate = list
+      .filter((it) => !it.occurrence.scheduledDate)
+      .sort(byCreated);
+
+    [['overdue', overdue], ['upcoming', upcoming], ['nodate', nodate]].forEach(([key, items]) => {
+      fillList($('list-' + key), items.map(row));
+      $('empty-' + key).hidden = items.length > 0;
+      $('count-' + key).textContent = items.length ? String(items.length) : '';
+    });
+  }
+
+  function renderFilterChips() {
+    const wrap = $('category-filter');
+    wrap.innerHTML = '';
+    [{ id: 'all', name: '전체' }].concat(categories).forEach((cat) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip' + (tasksFilter === cat.id ? ' active' : '');
+      btn.textContent = cat.name;
+      btn.setAttribute('aria-pressed', String(tasksFilter === cat.id));
+      btn.addEventListener('click', () => {
+        tasksFilter = cat.id;
+        renderFilterChips();
+        renderTasks();
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
   // ---------- 빠른 추가 입력창 ----------
   function openSheet() {
     const input = $('quick-add-input');
@@ -165,16 +320,180 @@
     setTimeout(() => input.focus(), 60);
   }
 
+  // 열려 있는 입력창(빠른 추가·수정)을 모두 닫음. 취소하면 저장하지 않음
   function closeSheet() {
     const input = $('quick-add-input');
-    input.value = '';     // 취소하면 저장하지 않음
-    input.blur();
+    input.value = '';
+    if (document.activeElement) document.activeElement.blur();
     $('sheet-backdrop').classList.remove('open');
     $('quick-add-sheet').classList.remove('open');
+    $('edit-sheet').classList.remove('open');
+    editing = null;
   }
 
   function isSheetOpen() {
-    return $('quick-add-sheet').classList.contains('open');
+    return $('quick-add-sheet').classList.contains('open') ||
+      $('edit-sheet').classList.contains('open');
+  }
+
+  // '+' 버튼: 오늘 화면은 빠른 추가, 전체 할 일 화면은 상세 추가
+  function onFabClick() {
+    if (currentScreen === 'tasks') openNew();
+    else openSheet();
+  }
+
+  // ---------- 추가·수정 입력창 ----------
+  function fillCategorySelect(selectedId) {
+    const sel = $('edit-category');
+    sel.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '없음';
+    sel.appendChild(none);
+    categories.forEach((cat) => {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      sel.appendChild(opt);
+    });
+    sel.value = selectedId || '';
+  }
+
+  // 날짜가 없으면 시간을 넣을 수 없게 하고, 날짜 관련 안내를 표시
+  function updateDateFields() {
+    const hasDate = !!$('edit-date').value;
+    const timeInput = $('edit-time');
+    if (!hasDate) timeInput.value = '';
+    timeInput.disabled = !hasDate;
+    document.querySelector('[data-clear="edit-date"]').disabled = !hasDate;
+    document.querySelector('[data-clear="edit-time"]').disabled = !timeInput.value;
+
+    const hints = [];
+    const occ = editing && editing.mode === 'edit' ? editing.item.occurrence : null;
+    if (occ && occ.originalDate && occ.originalDate !== $('edit-date').value) {
+      hints.push('원래 예정일: ' + formatShortDate(occ.originalDate) + ' (보존됨)');
+    }
+    if (!hasDate) hints.push('날짜를 비우면 \'날짜 없는 할 일\'로 저장돼요');
+    $('edit-date-hint').textContent = hints.join(' · ');
+  }
+
+  function openEditSheet() {
+    $('sheet-backdrop').classList.add('open');
+    $('edit-sheet').classList.add('open');
+    $('edit-sheet').scrollTop = 0;
+  }
+
+  // 새 할 일 (전체 할 일 화면의 '+')
+  function openNew() {
+    editing = { mode: 'new' };
+    $('edit-heading').textContent = '할 일 추가';
+    $('edit-title').value = '';
+    fillCategorySelect(tasksFilter !== 'all' ? tasksFilter : '');   // 필터 중이면 그 카테고리로
+    $('edit-date').value = '';
+    $('edit-time').value = '';
+    $('edit-memo').value = '';
+    $('edit-completed-field').hidden = true;
+    $('edit-delete').hidden = true;
+    updateDateFields();
+    openEditSheet();
+    setTimeout(() => $('edit-title').focus(), 60);
+  }
+
+  // 기존 할 일 수정 (항상 저장소에서 최신 값을 다시 읽어 옴)
+  async function openEdit(occurrenceId) {
+    if (busy) return;
+    try {
+      const item = await DB.getItem(occurrenceId);
+      if (!item) {
+        showError('할 일을 찾을 수 없어요. 목록을 새로 고칠게요.');
+        await reloadAll();
+        return;
+      }
+      const occ = item.occurrence;
+      editing = { mode: 'edit', item: item };
+      $('edit-heading').textContent = '할 일 수정';
+      $('edit-title').value = item.task.title;
+      fillCategorySelect(item.task.categoryId);
+      $('edit-date').value = occ.scheduledDate || '';
+      $('edit-time').value = occ.time || '';
+      $('edit-memo').value = item.task.memo || '';
+
+      const isDone = occ.status === 'done';
+      $('edit-completed-field').hidden = !isDone;
+      $('edit-completed').value = isDone ? (occ.completedDate || todayStr) : '';
+      $('edit-completed').max = todayStr;
+
+      $('edit-delete').hidden = false;
+      updateDateFields();
+      openEditSheet();
+    } catch (err) {
+      showError('할 일을 불러오지 못했어요.', err);
+    }
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (busy || !editing) return;
+
+    const titleInput = $('edit-title');
+    const title = titleInput.value.trim();
+    if (!title) { shake(titleInput); return; }
+
+    const fields = {
+      title: title,
+      categoryId: $('edit-category').value || null,
+      memo: $('edit-memo').value.trim(),
+      date: $('edit-date').value || null,
+      time: $('edit-time').value || null
+    };
+
+    if (editing.mode === 'edit' && editing.item.occurrence.status === 'done') {
+      const completedInput = $('edit-completed');
+      const completed = completedInput.value;
+      if (!completed) { shake(completedInput); return; }
+      if (completed > todayStr) {
+        alert('실제 완료일은 오늘 이후 날짜로 정할 수 없어요.');
+        return;
+      }
+      fields.completedDate = completed;
+    }
+
+    busy = true;
+    try {
+      if (editing.mode === 'new') await DB.addTask(fields);
+      else await DB.updateItem(editing.item.occurrence.id, fields);
+      closeSheet();
+      await reloadAll();
+    } catch (err) {
+      // 실패하면 창을 닫지 않음 (입력한 내용 유지, 다시 시도 가능)
+      showError('저장하지 못했어요. 다시 시도해 주세요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 삭제: 완료 기록이 있으면 개수를 알리고 확인받음
+  async function deleteEditing() {
+    if (busy || !editing || editing.mode !== 'edit') return;
+    const task = editing.item.task;
+    try {
+      const doneCount = await DB.countDoneOccurrences(task.id);
+      let msg = '\'' + task.title + '\'을(를) 삭제할까요?';
+      if (doneCount > 0) {
+        msg += '\n\n완료 기록 ' + doneCount + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      }
+      if (!confirm(msg)) return;
+
+      busy = true;
+      await DB.deleteTask(task.id);
+      closeSheet();
+      await reloadAll();
+      showToast('삭제했어요');
+    } catch (err) {
+      showError('삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
   }
 
   async function submitQuickAdd(event) {
@@ -195,7 +514,7 @@
     try {
       await DB.addQuickTask(title, todayStr);
       closeSheet();
-      await loadToday();
+      await reloadAll();
     } catch (err) {
       // 저장 실패 시 입력한 글자는 지우지 않고 창을 열어 둠 (다시 시도 가능)
       showError('할 일을 저장하지 못했어요. 다시 시도해 주세요.', err);
@@ -210,7 +529,7 @@
     if (now !== todayStr) {
       todayStr = now;
       renderDate();
-      loadToday().catch((err) => showError('오늘 목록을 불러오지 못했어요.', err));
+      reloadAll().catch((err) => showError('목록을 불러오지 못했어요.', err));
     }
   }
 
@@ -224,14 +543,31 @@
       btn.addEventListener('click', () => showScreen(btn.dataset.target));
     });
 
-    $('fab-add').addEventListener('click', openSheet);
+    $('fab-add').addEventListener('click', onFabClick);
     $('quick-add-cancel').addEventListener('click', closeSheet);
     $('sheet-backdrop').addEventListener('click', closeSheet);
     $('quick-add-sheet').addEventListener('submit', submitQuickAdd);
-    $('quick-add-input').addEventListener('animationend', (e) => {
-      e.target.classList.remove('shake');
-    });
     $('done-toggle').addEventListener('click', toggleDoneList);
+
+    // 수정창
+    $('edit-sheet').addEventListener('submit', submitEdit);
+    $('edit-cancel').addEventListener('click', closeSheet);
+    $('edit-delete').addEventListener('click', deleteEditing);
+    $('edit-date').addEventListener('change', updateDateFields);
+    $('edit-date').addEventListener('input', updateDateFields);
+    $('edit-time').addEventListener('change', updateDateFields);
+    $('edit-time').addEventListener('input', updateDateFields);
+    document.querySelectorAll('.clear-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $(btn.dataset.clear).value = '';
+        updateDateFields();
+      });
+    });
+
+    // 흔들기 애니메이션이 끝나면 표시 제거
+    document.addEventListener('animationend', (e) => {
+      if (e.target.classList) e.target.classList.remove('shake');
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && isSheetOpen()) closeSheet();
@@ -242,11 +578,13 @@
       if (document.visibilityState === 'visible') refreshIfDateChanged();
     });
 
-    // 저장소 연결 후 오늘 데이터 불러오기
+    // 저장소 연결 후 데이터 불러오기
     try {
       await DB.open();
       DB.requestPersist();   // 결과를 기다리지 않음 (실패해도 앱 사용에 지장 없음)
-      await loadToday();
+      categories = await DB.getCategories();
+      renderFilterChips();
+      await reloadAll();
     } catch (err) {
       showError('데이터를 불러오지 못했어요. 브라우저의 시크릿 모드에서는 저장이 안 될 수 있어요.', err);
     }
