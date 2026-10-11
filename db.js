@@ -976,6 +976,139 @@ const DB = (function () {
     });
   }
 
+  // ---------- 백업과 복원 ----------
+  // 백업 파일 모양:
+  // { app: 'life-planner', format: 1, dbVersion, appVersion, exportedAt, counts: {...}, data: { 서랍이름: [기록, ...] } }
+
+  const BACKUP_APP = 'life-planner';
+  const BACKUP_FORMAT = 1;   // 파일 형식 버전 (구조가 바뀌면 올림)
+
+  // 앱이 관리하는 모든 서랍과 각 기록의 열쇠 이름
+  const STORES = {
+    tasks: 'id', rules: 'id', occurrences: 'id',
+    weeklyGoals: 'id',
+    habits: 'id', habitLogs: 'id',
+    missions: 'id', missionTargets: 'id', missionLogs: 'id',
+    routines: 'id', routineLogs: 'id',
+    settings: 'key'
+  };
+  const STORE_NAMES = Object.keys(STORES);
+
+  // 모든 서랍의 내용을 한 번에 읽기 (읽는 도중 바뀌지 않도록 하나의 묶음으로)
+  function exportAll(appVersion) {
+    return run(STORE_NAMES, 'readonly', (tx) => {
+      const out = {
+        app: BACKUP_APP,
+        format: BACKUP_FORMAT,
+        dbVersion: DB_VERSION,
+        appVersion: appVersion || '',
+        exportedAt: nowISO(),
+        counts: {},
+        data: {}
+      };
+      STORE_NAMES.forEach((name) => {
+        const req = tx.objectStore(name).getAll();
+        req.onsuccess = () => {
+          out.data[name] = req.result;
+          out.counts[name] = req.result.length;
+        };
+      });
+      return out;
+    });
+  }
+
+  // 서랍별 기록 개수
+  function countAll() {
+    return run(STORE_NAMES, 'readonly', (tx) => {
+      const counts = {};
+      STORE_NAMES.forEach((name) => {
+        const req = tx.objectStore(name).count();
+        req.onsuccess = () => { counts[name] = req.result; };
+      });
+      return counts;
+    });
+  }
+
+  // 백업 파일 검사. 돌려주는 값: { ok: true, counts } 또는 { ok: false, error: '사람이 읽을 이유' }
+  function validateBackup(obj) {
+    const fail = (msg) => ({ ok: false, error: msg });
+    const isStr = (v) => typeof v === 'string' && v.length > 0;
+    const isDate = (v) => v === null || v === undefined || /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+    if (!obj || typeof obj !== 'object') return fail('백업 파일 내용이 비어 있거나 형식이 맞지 않아요.');
+    if (obj.app !== BACKUP_APP) return fail('이 앱에서 만든 백업 파일이 아니에요.');
+    if (typeof obj.format !== 'number') return fail('백업 파일 형식 정보가 없어요.');
+    if (obj.format > BACKUP_FORMAT) return fail('더 새로운 버전의 앱에서 만든 백업이에요. 앱을 먼저 업데이트해 주세요.');
+    if (!obj.data || typeof obj.data !== 'object') return fail('백업 파일에 데이터 부분이 없어요.');
+
+    const counts = {};
+    for (const name of STORE_NAMES) {
+      const list = obj.data[name];
+      if (!Array.isArray(list)) return fail('백업 파일에 \'' + name + '\' 부분이 빠져 있어요.');
+      const keyName = STORES[name];
+      const seen = new Set();
+      for (const rec of list) {
+        if (!rec || typeof rec !== 'object') return fail('\'' + name + '\'에 잘못된 기록이 있어요.');
+        const key = rec[keyName];
+        if (!isStr(key)) return fail('\'' + name + '\'에 열쇠(' + keyName + ')가 없는 기록이 있어요.');
+        if (seen.has(key)) return fail('\'' + name + '\'에 같은 열쇠의 기록이 두 번 들어 있어요.');
+        seen.add(key);
+      }
+      counts[name] = list.length;
+    }
+
+    // 중요한 기록들의 내용 검사 (이 부분이 망가지면 앱이 제대로 동작하지 않음)
+    const taskIds = new Set(obj.data.tasks.map((t) => t.id));
+    for (const t of obj.data.tasks) {
+      if (typeof t.title !== 'string') return fail('할 일 중에 제목이 없는 것이 있어요.');
+    }
+    const okStatus = { pending: 1, done: 1, skipped: 1 };
+    for (const o of obj.data.occurrences) {
+      if (!taskIds.has(o.taskId)) return fail('어느 할 일에도 속하지 않은 회차 기록이 있어요.');
+      if (!okStatus[o.status]) return fail('회차 기록의 상태 값이 잘못되었어요.');
+      if (!isDate(o.originalDate) || !isDate(o.scheduledDate) || !isDate(o.completedDate)) {
+        return fail('회차 기록의 날짜 형식이 잘못되었어요.');
+      }
+    }
+    for (const r of obj.data.rules) {
+      if (!FREQUENCIES[r.frequency] || !isDate(r.anchorDate) || !r.anchorDate) {
+        return fail('반복 규칙 중에 잘못된 것이 있어요.');
+      }
+    }
+    for (const name of ['habitLogs', 'routineLogs', 'missionLogs']) {
+      for (const l of obj.data[name]) {
+        if (!isDate(l.date)) return fail('트래커 기록의 날짜 형식이 잘못되었어요.');
+      }
+    }
+    for (const name of ['habits', 'missions', 'routines']) {
+      for (const it of obj.data[name]) {
+        if (typeof it.name !== 'string') return fail('트래커 항목 중에 이름이 없는 것이 있어요.');
+      }
+    }
+    return { ok: true, counts: counts };
+  }
+
+  // 복원: 모든 서랍을 비우고 백업 내용으로 채움.
+  // 전부를 '하나의 묶음(트랜잭션)'으로 처리 → 중간에 하나라도 실패하면 모두 취소되어 기존 데이터가 그대로 남음
+  function importAll(backup) {
+    const check = validateBackup(backup);
+    if (!check.ok) return Promise.reject(new Error(check.error));
+    return run(STORE_NAMES, 'readwrite', (tx) => {
+      STORE_NAMES.forEach((name) => {
+        const store = tx.objectStore(name);
+        store.clear();
+        backup.data[name].forEach((rec) => store.add(rec));
+      });
+    });
+  }
+
+  // 마지막으로 백업한 시각 기록 (백업 화면에 표시용. 자동 알림은 하지 않음)
+  function setLastBackup(isoTime) {
+    return run(['settings'], 'readwrite', (tx) => {
+      tx.objectStore('settings').put({ key: 'lastBackupAt', value: isoTime });
+    });
+  }
+
   // ---------- 설정 ----------
 
   function getSetting(key) {
@@ -1040,7 +1173,12 @@ const DB = (function () {
     deleteRoutine: deleteRoutine,
     countRoutineLogs: countRoutineLogs,
     getRoutineLogs: getRoutineLogs,
-    setRoutineLog: setRoutineLog
+    setRoutineLog: setRoutineLog,
+    exportAll: exportAll,
+    countAll: countAll,
+    validateBackup: validateBackup,
+    importAll: importAll,
+    setLastBackup: setLastBackup
   };
 
 })();

@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v14';
+  const APP_VERSION = 'v15';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -55,6 +55,9 @@
   let reviewYear = new Date().getFullYear();
   let reviewMonth = new Date().getMonth() + 1;     // 1~12
   let reviewLoadId = 0;                            // 빠르게 탭·달을 바꿀 때 늦게 온 결과 무시
+
+  // 백업·복원
+  let pendingRestore = null;                       // 검사를 통과한, 복원 대기 중인 백업 내용
 
   let currentScreen = 'today';
   let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
@@ -1657,6 +1660,168 @@
     }
   }
 
+  // ---------- 데이터 백업 · 복원 ----------
+
+  // 복원 확인 표에 보여 줄 항목 (서랍 이름 → 사람이 읽는 이름)
+  const BACKUP_LABELS = [
+    ['tasks', '할 일'],
+    ['occurrences', '할 일 회차 기록'],
+    ['rules', '반복 규칙'],
+    ['weeklyGoals', '주간 목표'],
+    ['habits', '습관'],
+    ['habitLogs', '습관 기록'],
+    ['missions', '미션'],
+    ['missionLogs', '미션 실천 기록'],
+    ['routines', '루틴'],
+    ['routineLogs', '루틴 기록']
+  ];
+
+  // ISO 시각 → '2026년 10월 12일 00:40'
+  function formatDateTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' +
+      pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  async function openDataSheet() {
+    closeSheet();
+    hideRestorePanel();
+    try {
+      const last = await DB.getSetting('lastBackupAt');
+      $('data-last-backup').textContent = last
+        ? '마지막 백업: ' + formatDateTime(last)
+        : '아직 백업한 적이 없어요';
+    } catch (err) {
+      $('data-last-backup').textContent = '';
+    }
+    hideToast();
+    $('sheet-backdrop').classList.add('open');
+    $('data-sheet').classList.add('open');
+    $('data-sheet').scrollTop = 0;
+  }
+
+  // 백업 파일 저장. 성공하면 true
+  async function exportBackup() {
+    try {
+      const backup = await DB.exportAll(APP_VERSION);
+      const json = JSON.stringify(backup, null, 1);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'life-planner-backup-' + todayStr + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      await DB.setLastBackup(backup.exportedAt);
+      $('data-last-backup').textContent = '마지막 백업: ' + formatDateTime(backup.exportedAt);
+      showToast('백업 파일을 저장했어요 (다운로드 폴더)');
+      return true;
+    } catch (err) {
+      showError('백업 파일을 만들지 못했어요.', err);
+      return false;
+    }
+  }
+
+  function hideRestorePanel() {
+    pendingRestore = null;
+    $('restore-panel').hidden = true;
+    $('restore-backed-up').hidden = true;
+  }
+
+  // 파일을 고르면: 읽기 → 검사 → 지금 데이터와 비교해서 보여 주기 (아직 아무것도 바꾸지 않음)
+  async function onBackupFilePicked(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    input.value = '';               // 같은 파일을 다시 골라도 동작하도록
+    hideRestorePanel();
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      showError('파일이 너무 커요. 이 앱의 백업 파일이 맞는지 확인해 주세요.');
+      return;
+    }
+
+    let backup;
+    try {
+      const text = await file.text();
+      backup = JSON.parse(text);
+    } catch (err) {
+      showError('파일을 읽을 수 없어요. 이 앱에서 저장한 백업 파일(.json)인지 확인해 주세요.', err);
+      return;
+    }
+
+    const check = DB.validateBackup(backup);
+    if (!check.ok) {
+      showError('이 파일로는 복원할 수 없어요.\n' + check.error);
+      return;
+    }
+
+    let current;
+    try {
+      current = await DB.countAll();
+    } catch (err) {
+      showError('현재 데이터를 확인하지 못했어요.', err);
+      return;
+    }
+
+    pendingRestore = backup;
+    $('restore-file').textContent = '📄 ' + file.name + '\n백업한 때: ' +
+      (formatDateTime(backup.exportedAt) || '알 수 없음') +
+      (backup.appVersion ? ' (앱 ' + backup.appVersion + ')' : '');
+
+    const table = $('restore-table');
+    table.innerHTML = '';
+    const head = document.createElement('tr');
+    ['', '지금', '파일'].forEach((t) => head.appendChild(el('th', '', t)));
+    table.appendChild(head);
+    BACKUP_LABELS.forEach(([name, label]) => {
+      const tr = document.createElement('tr');
+      tr.appendChild(el('td', '', label));
+      tr.appendChild(el('td', 'num', String(current[name] || 0)));
+      tr.appendChild(el('td', 'num', String(check.counts[name] || 0)));
+      table.appendChild(tr);
+    });
+
+    $('restore-panel').hidden = false;
+    $('restore-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function backupBeforeRestore() {
+    if (busy) return;
+    busy = true;
+    const ok = await exportBackup();
+    busy = false;
+    if (ok) $('restore-backed-up').hidden = false;
+  }
+
+  async function runRestore() {
+    if (busy || !pendingRestore) return;
+    let msg = '정말 복원할까요?\n\n지금 데이터가 모두 지워지고 백업 파일의 내용으로 바뀌어요.';
+    if ($('restore-backed-up').hidden) {
+      msg += '\n\n⚠️ 아직 현재 데이터를 백업하지 않았어요.';
+    }
+    if (!confirm(msg)) return;
+
+    busy = true;
+    try {
+      await DB.importAll(pendingRestore);
+      // 지금 데이터 = 그 백업 파일의 내용이므로, 마지막 백업 시각을 그 파일의 시각으로 표시
+      if (pendingRestore.exportedAt) {
+        await DB.setLastBackup(pendingRestore.exportedAt).catch(() => {});
+      }
+      alert('복원을 마쳤어요. 앱을 새로 불러올게요.');
+      location.reload();
+    } catch (err) {
+      // 복원은 하나의 묶음으로 처리되므로, 실패하면 아무것도 바뀌지 않음
+      showError('복원하지 못했어요. 기존 데이터는 그대로 남아 있어요.\n(' + (err && err.message ? err.message : err) + ')', err);
+      busy = false;
+    }
+  }
+
   function renderFilterChips() {
     const wrap = $('category-filter');
     wrap.innerHTML = '';
@@ -1695,14 +1860,17 @@
     $('quick-add-sheet').classList.remove('open');
     $('edit-sheet').classList.remove('open');
     $('tracker-sheet').classList.remove('open');
+    $('data-sheet').classList.remove('open');
     editing = null;
     trackerEditing = null;
+    pendingRestore = null;
   }
 
   function isSheetOpen() {
     return $('quick-add-sheet').classList.contains('open') ||
       $('edit-sheet').classList.contains('open') ||
-      $('tracker-sheet').classList.contains('open');
+      $('tracker-sheet').classList.contains('open') ||
+      $('data-sheet').classList.contains('open');
   }
 
   // '+' 버튼: 오늘 화면은 빠른 추가, 전체 할 일 화면은 상세 추가
@@ -2151,6 +2319,20 @@
       missionArchivedOpen = !missionArchivedOpen;
       renderMissions();
     });
+
+    // 백업·복원
+    $('open-data').addEventListener('click', openDataSheet);
+    $('data-close').addEventListener('click', closeSheet);
+    $('data-export').addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      await exportBackup();
+      busy = false;
+    });
+    $('data-file').addEventListener('change', onBackupFilePicked);
+    $('restore-backup-first').addEventListener('click', backupBeforeRestore);
+    $('restore-run').addEventListener('click', runRestore);
+    $('restore-cancel').addEventListener('click', hideRestorePanel);
 
     // 리뷰
     document.querySelectorAll('#review-tabs .seg-tab').forEach((btn) => {

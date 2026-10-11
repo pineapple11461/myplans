@@ -1051,3 +1051,69 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 .mini-not_done { background: #F5EEE9; color: #B5A79E; border: 1px solid #E2D7CF; line-height: 14px; }
 .mini-none { border: 1px dashed #E6D6CB; }
 .mini-future { background: transparent; border: 1px dotted #F1E4DA; opacity: 0.5; }
+
+/* =========================================
+   9단계 추가: 데이터 백업 · 복원
+   ========================================= */
+
+/* 오늘 화면 오른쪽 위 ⚙️ */
+.today-header { position: relative; }
+.settings-btn {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow);
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+
+.data-block {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg);
+}
+.data-title { font-size: 1rem; margin-bottom: 4px; }
+.data-block .field-hint { margin-bottom: 10px; line-height: 1.5; }
+.data-last { font-size: 0.85rem; color: var(--pink-dark); margin-bottom: 10px; }
+.data-done { font-size: 0.85rem; color: #4E9A7E; margin: -2px 0 8px; text-align: center; }
+
+.btn-block { display: block; width: 100%; text-align: center; margin-bottom: 8px; }
+.file-btn { cursor: pointer; }
+.btn-danger-fill { background: #D9667F; color: #fff; }
+.btn-danger-fill:active { background: #C4546D; }
+
+.restore-panel {
+  margin-top: 6px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.restore-file { white-space: pre-line; font-size: 0.85rem; margin-bottom: 8px; word-break: break-all; }
+.restore-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.restore-table th, .restore-table td { padding: 5px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.restore-table th { color: var(--muted); font-weight: 400; }
+.restore-table .num { text-align: right; width: 64px; }
+.restore-table th:nth-child(2), .restore-table th:nth-child(3) { text-align: right; }
+.restore-warn {
+  background: var(--pink-soft);
+  color: #A04A5E;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
