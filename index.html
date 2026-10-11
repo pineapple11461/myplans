@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
 
@@ -220,10 +220,29 @@
       <header class="screen-header">
         <h1 class="screen-title">📖 리뷰 및 기록</h1>
       </header>
-      <div class="card placeholder">
-        <span class="placeholder-emoji">📚</span>
-        8단계에서 만들 예정이에요
+
+      <!-- 기록 종류 탭 -->
+      <div class="seg-tabs" id="review-tabs" role="tablist" aria-label="기록 종류">
+        <button type="button" class="seg-tab active" data-tab="tasks" role="tab">할 일</button>
+        <button type="button" class="seg-tab" data-tab="goals" role="tab">목표</button>
+        <button type="button" class="seg-tab" data-tab="habits" role="tab">습관</button>
+        <button type="button" class="seg-tab" data-tab="missions" role="tab">미션</button>
+        <button type="button" class="seg-tab" data-tab="routines" role="tab">루틴</button>
       </div>
+
+      <!-- 월 이동 -->
+      <div class="card week-nav">
+        <button type="button" class="cal-nav" id="review-prev" aria-label="이전 달">‹</button>
+        <div class="week-label">
+          <strong id="review-title"></strong>
+          <span id="review-sub"></span>
+        </div>
+        <button type="button" class="cal-nav" id="review-next" aria-label="다음 달">›</button>
+        <button type="button" class="cal-today-btn" id="review-this">이번 달</button>
+      </div>
+
+      <!-- 내용 (app.js가 채움) -->
+      <div id="review-body"></div>
     </section>
 
   </main>
@@ -313,6 +332,8 @@
     <p class="field-hint" id="edit-repeat-hint"></p>
 
     <div class="occ-actions" id="occ-actions" hidden>
+      <button type="button" class="btn btn-soft" id="edit-undone" hidden>완료 취소</button>
+      <button type="button" class="btn btn-soft" id="edit-unskip" hidden>건너뛰기 취소</button>
       <button type="button" class="btn btn-soft" id="edit-skip">이번 회차 건너뛰기</button>
       <button type="button" class="btn btn-soft" id="edit-stop">반복 중단</button>
     </div>
@@ -383,7 +404,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=13" defer></script>
-  <script src="app.js?v=13" defer></script>
+  <script src="db.js?v=14" defer></script>
+  <script src="app.js?v=14" defer></script>
 </body>
 </html>

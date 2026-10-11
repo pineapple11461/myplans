@@ -345,6 +345,30 @@ const DB = (function () {
     });
   }
 
+  // 리뷰용: 기간(start~end) 안에 완료했거나 건너뛴 회차 + 할 일 정보
+  // 완료는 실제 완료일, 건너뜀은 건너뛴 날 기준
+  async function getReviewTasks(start, end) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['occurrences', 'tasks'], 'readonly');
+      const occs = [];
+      const tasksById = {};
+      tx.oncomplete = () => resolve(occs
+        .filter((o) => tasksById[o.taskId])
+        .map((o) => ({ occurrence: o, task: tasksById[o.taskId] })));
+      tx.onerror = () => reject(tx.error);
+
+      const idx = tx.objectStore('occurrences').index('status');
+      const inRange = (d) => d && d >= start && d <= end;
+      const r1 = idx.getAll('done');
+      r1.onsuccess = () => r1.result.forEach((o) => { if (inRange(o.completedDate)) occs.push(o); });
+      const r2 = idx.getAll('skipped');
+      r2.onsuccess = () => r2.result.forEach((o) => { if (inRange(o.skippedDate)) occs.push(o); });
+      const r3 = tx.objectStore('tasks').getAll();
+      r3.onsuccess = () => r3.result.forEach((t) => { tasksById[t.id] = t; });
+    });
+  }
+
   // 회차 1개 + 할 일 정보 + 진행 중인 반복 규칙 (없으면 null)
   async function getItem(occurrenceId) {
     const db = await open();
@@ -974,6 +998,7 @@ const DB = (function () {
     getItemsByDate: getItemsByDate,
     getPendingItems: getPendingItems,
     getCalendarData: getCalendarData,
+    getReviewTasks: getReviewTasks,
     getItem: getItem,
     updateItem: updateItem,
     setOccurrenceDone: setOccurrenceDone,

@@ -955,3 +955,99 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
   background: var(--pink);
   color: #fff;
 }
+
+/* =========================================
+   8단계 추가: 리뷰 및 기록
+   ========================================= */
+
+/* 기록 종류 탭 */
+.seg-tabs {
+  display: flex;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 4px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.seg-tab {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  padding: 8px 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg-tab.active { background: var(--pink); color: #fff; font-weight: 700; }
+
+.cal-nav:disabled { opacity: 0.3; cursor: default; }
+
+/* 할 일 기록 */
+.review-date {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 400;
+  margin: 14px 0 2px;
+}
+.review-date:first-of-type { margin-top: 4px; }
+.review-list { list-style: none; }
+.review-row {
+  padding: 9px 0;
+  border-top: 1px dashed var(--line);
+  cursor: pointer;
+}
+.review-row:first-child { border-top: none; }
+.review-row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.review-row-title { flex: 1; word-break: break-word; }
+
+/* 트래커 기록 (주별) */
+.review-week-title { font-size: 1rem; }
+.review-go {
+  flex: none;
+  border: none;
+  background: var(--pink-soft);
+  color: var(--pink-dark);
+  border-radius: 12px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.review-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px dashed var(--line);
+}
+.review-line:first-child { border-top: none; }
+.review-line-name { flex: 1; min-width: 0; word-break: break-word; font-size: 0.92rem; }
+.review-line-count {
+  flex: none;
+  font-size: 0.82rem;
+  color: var(--pink-dark);
+  font-weight: 700;
+  min-width: 38px;
+  text-align: right;
+}
+
+/* 작은 월~일 칸 */
+.mini-cells { display: inline-flex; gap: 3px; flex: none; }
+.mini {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  font-style: normal;
+  font-size: 0.58rem;
+  line-height: 16px;
+  text-align: center;
+}
+.mini-done { background: var(--pink); color: #fff; }
+.mini-not_done { background: #F5EEE9; color: #B5A79E; border: 1px solid #E2D7CF; line-height: 14px; }
+.mini-none { border: 1px dashed #E6D6CB; }
+.mini-future { background: transparent; border: 1px dotted #F1E4DA; opacity: 0.5; }

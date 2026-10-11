@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v13';
+  const APP_VERSION = 'v14';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -49,6 +49,12 @@
   let routineArchivedOpen = false;
   let trackerEditing = null;       // 트래커 수정창 상태: { kind: 'habit', item }
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
+
+  // 리뷰 화면
+  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions' | 'routines'
+  let reviewYear = new Date().getFullYear();
+  let reviewMonth = new Date().getMonth() + 1;     // 1~12
+  let reviewLoadId = 0;                            // 빠르게 탭·달을 바꿀 때 늦게 온 결과 무시
 
   let currentScreen = 'today';
   let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
@@ -146,6 +152,11 @@
     $('fab-add').hidden = !(name === 'today' || name === 'tasks');
     closeSheet();
     hideToast();
+
+    // 리뷰 화면은 열 때마다 최신 기록을 다시 읽음 (트래커에서 고친 내용 반영)
+    if (name === 'review') {
+      loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
+    }
 
     window.scrollTo(0, 0);
   }
@@ -273,6 +284,7 @@
   async function reloadAll() {
     await DB.syncRecurrences(todayStr);
     await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker()]);
+    if (currentScreen === 'review') await loadReview();
   }
 
   // 완료 / 완료 취소. 실제 완료일은 오늘 날짜로 자동 기록 (수정창에서 변경 가능)
@@ -1322,6 +1334,329 @@
     }
   }
 
+  // ---------- 리뷰 및 기록 화면 ----------
+  // 기록 종류별로 나눠서 보여 줌. 할 일 기록은 수정창에서, 트래커 기록은 트래커 화면에서 고침
+  // (고치는 곳을 한 군데로 두어 다른 종류의 기록에 영향이 가지 않게 함)
+
+  const REVIEW_NAMES = { tasks: '할 일', goals: '주간 목표', habits: '습관', missions: '미션', routines: '루틴' };
+
+  function monthRangeOf(y, m) {
+    const last = new Date(y, m, 0).getDate();
+    const prefix = y + '-' + pad2(m) + '-';
+    return { start: prefix + '01', end: prefix + pad2(last) };
+  }
+
+  // 그 달에 시작하는(월요일이 그 달에 있는) 주들, 최신 주부터. 이번 주 이후는 제외
+  function weeksInMonth(y, m) {
+    const thisWeek = DB.weekStartOf(todayStr);
+    const last = new Date(y, m, 0).getDate();
+    const out = [];
+    for (let d = 1; d <= last; d++) {
+      const s = y + '-' + pad2(m) + '-' + pad2(d);
+      if (new Date(y, m - 1, d).getDay() === 1 && s <= thisWeek) out.push(s);
+    }
+    return out.reverse();
+  }
+
+  function dayDiff(from, to) {
+    const a = from.split('-').map(Number);
+    const b = to.split('-').map(Number);
+    return Math.round((new Date(b[0], b[1] - 1, b[2]) - new Date(a[0], a[1] - 1, a[2])) / 86400000);
+  }
+
+  function isThisMonth(y, m) {
+    return todayStr.slice(0, 7) === y + '-' + pad2(m);
+  }
+
+  function renderReviewHeader() {
+    $('review-title').textContent = reviewYear + '년 ' + reviewMonth + '월';
+    $('review-sub').textContent = reviewTab === 'tasks'
+      ? '완료하거나 건너뛴 할 일'
+      : REVIEW_NAMES[reviewTab] + ' · 월요일 기준 주별 기록';
+    const thisMonth = isThisMonth(reviewYear, reviewMonth);
+    $('review-this').hidden = thisMonth;
+    $('review-next').disabled = thisMonth;
+    document.querySelectorAll('#review-tabs .seg-tab').forEach((b) => {
+      const on = b.dataset.tab === reviewTab;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+  }
+
+  async function loadReview() {
+    const myId = ++reviewLoadId;
+    renderReviewHeader();
+    let cards;
+    if (reviewTab === 'tasks') {
+      const r = monthRangeOf(reviewYear, reviewMonth);
+      const items = await DB.getReviewTasks(r.start, r.end);
+      if (myId !== reviewLoadId) return;
+      cards = renderReviewTasks(items);
+    } else {
+      const weeks = weeksInMonth(reviewYear, reviewMonth);
+      const data = await Promise.all(weeks.map((w) => loadWeekRecords(w)));
+      if (myId !== reviewLoadId) return;
+      cards = renderReviewWeeks(weeks, data);
+    }
+    const body = $('review-body');
+    body.innerHTML = '';
+    cards.forEach((c) => body.appendChild(c));
+  }
+
+  function loadWeekRecords(week) {
+    if (reviewTab === 'goals') return DB.getWeeklyGoals(week);
+    if (reviewTab === 'habits') return DB.getHabitLogs(week);
+    if (reviewTab === 'missions') return DB.getMissionWeek(week);
+    return DB.getRoutineLogs(week);
+  }
+
+  function emptyCard(text) {
+    const card = document.createElement('div');
+    card.className = 'card placeholder';
+    const emoji = document.createElement('span');
+    emoji.className = 'placeholder-emoji';
+    emoji.textContent = '📚';
+    card.appendChild(emoji);
+    card.appendChild(document.createTextNode(text));
+    return card;
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // ----- 할 일 기록 -----
+  function renderReviewTasks(items) {
+    if (!items.length) return [emptyCard('이 달에 완료하거나 건너뛴 할 일이 없어요')];
+
+    const keyOf = (it) => it.occurrence.status === 'done' ? it.occurrence.completedDate : it.occurrence.skippedDate;
+    const groups = {};
+    items.forEach((it) => { (groups[keyOf(it)] = groups[keyOf(it)] || []).push(it); });
+    const dates = Object.keys(groups).sort().reverse();
+
+    const card = el('div', 'card');
+    const total = items.filter((it) => it.occurrence.status === 'done').length;
+    card.appendChild(el('h2', 'card-title', '✅ 완료한 할 일 ' + total + '개'));
+
+    dates.forEach((d) => {
+      card.appendChild(el('h3', 'review-date', formatShortDate(d)));
+      const list = el('ul', 'review-list');
+      groups[d].sort(byCreated).forEach((it) => list.appendChild(reviewTaskRow(it)));
+      card.appendChild(list);
+    });
+    return [card];
+  }
+
+  function reviewTaskRow(item) {
+    const occ = item.occurrence;
+    const li = el('li', 'review-row');
+    li.setAttribute('role', 'button');
+    li.tabIndex = 0;
+    li.addEventListener('click', () => openEdit(occ.id));
+
+    const top = el('div', 'review-row-top');
+    top.appendChild(el('span', 'review-row-title', item.task.title));
+    if (occ.status === 'skipped') top.appendChild(el('span', 'badge', '건너뜀'));
+    li.appendChild(top);
+
+    const meta = el('div', 'task-meta');
+    if (occ.status === 'done') {
+      if (!occ.scheduledDate) {
+        meta.appendChild(el('span', '', '날짜 없던 일'));
+      } else if (occ.scheduledDate === occ.completedDate) {
+        meta.appendChild(el('span', '', '예정일에 완료'));
+      } else {
+        const diff = dayDiff(occ.scheduledDate, occ.completedDate);
+        meta.appendChild(el('span', diff > 0 ? 'meta-overdue' : '',
+          '예정 ' + formatMD(occ.scheduledDate) + ' → ' +
+          (diff > 0 ? diff + '일 늦게 완료' : (-diff) + '일 일찍 완료')));
+      }
+    } else if (occ.scheduledDate) {
+      meta.appendChild(el('span', '', '예정 ' + formatMD(occ.scheduledDate)));
+    }
+    if (occ.originalDate && occ.originalDate !== occ.scheduledDate) {
+      meta.appendChild(el('span', '', '원래 ' + formatMD(occ.originalDate)));
+    }
+    if (occ.ruleId) meta.appendChild(el('span', 'meta-repeat', '🔁'));
+    const cat = categoryName(item.task.categoryId);
+    if (cat) meta.appendChild(el('span', 'meta-chip', cat));
+    li.appendChild(meta);
+    return li;
+  }
+
+  // ----- 트래커 기록 (주별) -----
+  function missionTargetFor(mission, week, overrides) {
+    if (overrides && overrides[mission.id] != null) return overrides[mission.id];
+    let target = 1;
+    (mission.targetHistory || []).forEach((h) => { if (h.fromWeek <= week) target = h.target; });
+    return target;
+  }
+
+  function renderReviewWeeks(weeks, data) {
+    const thisWeek = DB.weekStartOf(todayStr);
+    const cards = [];
+    weeks.forEach((week, i) => {
+      const body = reviewWeekBody(week, data[i]);
+      if (!body) return;
+      const card = el('div', 'card');
+      const head = el('div', 'card-head');
+      const title = el('h2', 'card-title review-week-title',
+        formatMD(week) + ' ~ ' + formatMD(DB.addDays(week, 6)));
+      if (week === thisWeek) title.appendChild(el('span', 'count', ' 이번 주'));
+      const go = el('button', 'review-go', '이 주 고치기 ›');
+      go.type = 'button';
+      go.addEventListener('click', () => goTrackerWeek(week));
+      head.appendChild(title);
+      head.appendChild(go);
+      card.appendChild(head);
+      card.appendChild(body);
+      cards.push(card);
+    });
+    if (!cards.length) cards.push(emptyCard('이 달에는 ' + REVIEW_NAMES[reviewTab] + ' 기록이 없어요'));
+    return cards;
+  }
+
+  // 한 주의 내용. 보여 줄 게 없으면 null
+  function reviewWeekBody(week, records) {
+    const days = [0, 1, 2, 3, 4, 5, 6].map((n) => DB.addDays(week, n));
+    const list = el('ul', 'review-list');
+
+    if (reviewTab === 'goals') {
+      if (!records.length) return null;
+      records.forEach((g) => {
+        const li = el('li', 'review-line');
+        li.appendChild(el('span', 'goal-mark', '🎯'));
+        li.appendChild(el('span', 'review-line-name', g.text));
+        list.appendChild(li);
+      });
+      return list;
+    }
+
+    if (reviewTab === 'habits') {
+      const map = {};
+      records.forEach((l) => { map[l.id] = l.state; });
+      const shown = habits.filter((h) =>
+        habitsForWeek(week).includes(h) || records.some((l) => l.habitId === h.id));
+      if (!shown.length) return null;
+      shown.forEach((h) => {
+        const li = el('li', 'review-line');
+        li.appendChild(el('span', 'review-line-name', h.name));
+        const cells = el('span', 'mini-cells');
+        let done = 0;
+        days.forEach((d) => {
+          const st = map[h.id + '|' + d] || 'none';
+          if (st === 'done') done++;
+          cells.appendChild(el('i', 'mini mini-' + (d > todayStr ? 'future' : st),
+            st === 'done' ? '✓' : st === 'not_done' ? '✕' : ''));
+        });
+        li.appendChild(cells);
+        li.appendChild(el('span', 'review-line-count', done + '회'));
+        list.appendChild(li);
+      });
+      return list;
+    }
+
+    if (reviewTab === 'missions') {
+      const shown = missions.filter((m) =>
+        missionsForWeek(week).includes(m) || records.logs.some((l) => l.missionId === m.id));
+      if (!shown.length) return null;
+      shown.forEach((m) => {
+        const target = missionTargetFor(m, week, records.targets);
+        const count = records.logs.filter((l) => l.missionId === m.id).length;
+        const li = el('li', 'review-line');
+        li.appendChild(el('span', 'review-line-name', m.name));
+        if (count >= target) li.appendChild(el('span', 'badge badge-done', '달성'));
+        li.appendChild(el('span', 'review-line-count', count + '/' + target + '회'));
+        list.appendChild(li);
+      });
+      return list;
+    }
+
+    // routines
+    const doneSet = {};
+    records.forEach((l) => { if (l.done) doneSet[l.id] = true; });
+    const shown = routines.filter((r) =>
+      days.some((d) => d <= todayStr && routinesForDay(d).includes(r)) ||
+      records.some((l) => l.routineId === r.id));
+    if (!shown.length) return null;
+    shown.forEach((r) => {
+      const li = el('li', 'review-line');
+      li.appendChild(el('span', 'review-line-name', r.name));
+      const cells = el('span', 'mini-cells');
+      let done = 0;
+      let possible = 0;
+      days.forEach((d) => {
+        const active = d <= todayStr && routinesForDay(d).includes(r);
+        const isDone = !!doneSet[r.id + '|' + d];
+        if (active) possible++;
+        if (isDone) done++;
+        cells.appendChild(el('i', 'mini ' +
+          (isDone ? 'mini-done' : active ? 'mini-none' : 'mini-future'), isDone ? '✓' : ''));
+      });
+      li.appendChild(cells);
+      li.appendChild(el('span', 'review-line-count', done + '/' + possible + '일'));
+      list.appendChild(li);
+    });
+    return list;
+  }
+
+  // 리뷰에서 '이 주 고치기' → 트래커의 그 주로 이동
+  function goTrackerWeek(week) {
+    trackerWeek = week;
+    routineDay = week === DB.weekStartOf(todayStr) ? todayStr : week;
+    showScreen('tracker');
+    loadTracker().catch((err) => showError('트래커를 불러오지 못했어요.', err));
+  }
+
+  function moveReviewMonth(delta) {
+    if (delta === 0) {
+      const t = todayStr.split('-').map(Number);
+      reviewYear = t[0];
+      reviewMonth = t[1];
+    } else {
+      const d = new Date(reviewYear, reviewMonth - 1 + delta, 1);
+      reviewYear = d.getFullYear();
+      reviewMonth = d.getMonth() + 1;
+    }
+    loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
+  }
+
+  // ----- 수정창: 완료 취소 / 건너뛰기 취소 -----
+  async function undoneEditing() {
+    if (busy || !editing || editing.mode !== 'edit') return;
+    const item = editing.item;
+    busy = true;
+    try {
+      await DB.setOccurrenceDone(item.occurrence.id, false, null);
+      closeSheet();
+      await reloadAll();
+      showToast('완료를 취소했어요');
+    } catch (err) {
+      showError('완료를 취소하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function unskipEditing() {
+    if (busy || !editing || editing.mode !== 'edit') return;
+    const item = editing.item;
+    busy = true;
+    try {
+      await DB.setOccurrenceSkipped(item.occurrence.id, false, null);
+      closeSheet();
+      await reloadAll();
+      showToast('건너뛰기를 취소했어요');
+    } catch (err) {
+      showError('건너뛰기를 취소하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
   function renderFilterChips() {
     const wrap = $('category-filter');
     wrap.innerHTML = '';
@@ -1503,9 +1838,14 @@
     // 건너뛰기: 반복으로 생긴 미완료 회차 / 중단: 진행 중인 규칙이 있을 때
     const canSkip = isEdit && occ.status === 'pending' && !!occ.ruleId;
     const canStop = isEdit && !!rule && !changed;
+    // 완료 취소 / 건너뛰기 취소: 이미 완료했거나 건너뛴 회차
+    const canUndone = isEdit && occ.status === 'done';
+    const canUnskip = isEdit && occ.status === 'skipped';
     $('edit-skip').hidden = !canSkip;
     $('edit-stop').hidden = !canStop;
-    $('occ-actions').hidden = !(canSkip || canStop);
+    $('edit-undone').hidden = !canUndone;
+    $('edit-unskip').hidden = !canUnskip;
+    $('occ-actions').hidden = !(canSkip || canStop || canUndone || canUnskip);
 
     // 시간 적용 체크: 진행 중인 규칙의 미완료 회차에서 시간을 바꿨을 때만 보임
     const showApply = isEdit && !!rule && occ.ruleId === rule.id &&
@@ -1811,6 +2151,19 @@
       missionArchivedOpen = !missionArchivedOpen;
       renderMissions();
     });
+
+    // 리뷰
+    document.querySelectorAll('#review-tabs .seg-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        reviewTab = btn.dataset.tab;
+        loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
+      });
+    });
+    $('review-prev').addEventListener('click', () => moveReviewMonth(-1));
+    $('review-next').addEventListener('click', () => moveReviewMonth(1));
+    $('review-this').addEventListener('click', () => moveReviewMonth(0));
+    $('edit-undone').addEventListener('click', undoneEditing);
+    $('edit-unskip').addEventListener('click', unskipEditing);
 
     // 달력
     $('cal-prev').addEventListener('click', () => moveCalendarMonth(-1));
