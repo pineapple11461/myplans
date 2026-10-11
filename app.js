@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v19';
+  const APP_VERSION = 'v25';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -99,6 +99,22 @@
     const wd = '일월화수목금토'[d.getDay()];
     const yearPart = parts[0] !== new Date().getFullYear() ? parts[0] + '년 ' : '';
     return yearPart + parts[1] + '월 ' + parts[2] + '일 (' + wd + ')';
+  }
+
+  // 아이콘 하나 만들기 (index.html 맨 위에 정의한 모양을 사용)
+  // tint: 'pink' | 'mint' | 'butter' | 'lav' (동그라미 아이콘일 때 바탕색), 없으면 바탕 없음
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function iconEl(name, tint) {
+    const wrap = document.createElement('span');
+    wrap.className = 'ic-wrap' + (tint ? ' t-' + tint : '');
+    wrap.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ic');
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', '#i-' + name);
+    svg.appendChild(use);
+    wrap.appendChild(svg);
+    return wrap;
   }
 
   // 입력칸 흔들기 (필수 입력 안내)
@@ -447,7 +463,10 @@
 
   // 선택한 날의 목록: 이날 예정된 할 일 + 이날 완료한 다른 날의 할 일
   function renderCalendarDay(items, projections) {
-    $('cal-day-title').textContent = '🗓️ ' + formatShortDate(calSelected);
+    const dayTitle = $('cal-day-title');
+    dayTitle.innerHTML = '';
+    dayTitle.appendChild(iconEl('cal', 'mint'));
+    dayTitle.appendChild(document.createTextNode(formatShortDate(calSelected)));
 
     const sorted = items.slice().sort((a, b) => byTime(a, b) || byCreated(a, b));
     const rows = sorted.map((it) => calRow(it, null));
@@ -606,72 +625,23 @@
       const li = document.createElement('li');
       li.className = 'goal-item';
 
-      const mark = document.createElement('span');
-      mark.className = 'goal-mark';
-      mark.textContent = '🎯';
-      mark.setAttribute('aria-hidden', 'true');
+      const mark = iconEl('target');
+      mark.classList.add('goal-mark');
 
+      // 목표 글자를 누르면 루틴처럼 아래에서 수정창이 열림 (수정·삭제)
       const text = document.createElement('span');
       text.className = 'goal-text';
       text.textContent = goal.text;
       text.setAttribute('role', 'button');
       text.tabIndex = 0;
-      text.addEventListener('click', () => startEditGoal(li, goal));
-      text.addEventListener('keydown', (e) => { if (e.key === 'Enter') startEditGoal(li, goal); });
-
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'icon-btn';
-      del.setAttribute('aria-label', '목표 삭제');
-      del.textContent = '✕';
-      del.addEventListener('click', () => deleteGoal(goal));
+      text.addEventListener('click', () => openTrackerSheet('goal', goal));
+      text.addEventListener('keydown', (e) => { if (e.key === 'Enter') openTrackerSheet('goal', goal); });
 
       li.appendChild(mark);
       li.appendChild(text);
-      li.appendChild(del);
       list.appendChild(li);
     });
     $('goal-empty').hidden = weeklyGoals.length > 0;
-  }
-
-  // 목표 글자를 누르면 그 자리에서 고칠 수 있는 입력칸으로 바뀜
-  function startEditGoal(li, goal) {
-    if (busy) return;
-    const textEl = li.querySelector('.goal-text');
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'sheet-input goal-edit';
-    input.value = goal.text;
-    input.maxLength = 100;
-    input.setAttribute('enterkeyhint', 'done');
-    li.replaceChild(input, textEl);
-    input.focus();
-
-    let finished = false;
-    const finish = async (save) => {
-      if (finished) return;
-      finished = true;
-      const value = input.value.trim();
-      if (!save || !value || value === goal.text) {
-        renderGoals();                 // 변경 없음 또는 취소 (빈 칸이면 원래대로)
-        return;
-      }
-      busy = true;
-      try {
-        await DB.updateWeeklyGoal(goal.id, value);
-        await loadTracker();
-      } catch (err) {
-        showError('목표를 저장하지 못했어요.', err);
-        renderGoals();
-      } finally {
-        busy = false;
-      }
-    };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-      if (e.key === 'Escape') finish(false);
-    });
-    input.addEventListener('blur', () => finish(true));
   }
 
   async function addGoal(event) {
@@ -698,7 +668,9 @@
     busy = true;
     try {
       await DB.deleteWeeklyGoal(goal.id);
+      closeSheet();
       await loadTracker();
+      showToast('삭제했어요');
     } catch (err) {
       showError('목표를 삭제하지 못했어요.', err);
     } finally {
@@ -1217,6 +1189,7 @@
     return setMissionArchived(item, archive);
   }
   function deleteTrackerFully(kind, item) {
+    if (kind === 'goal') return deleteGoal(item);
     if (kind === 'habit') return deleteHabitFully(item);
     if (kind === 'routine') return deleteRoutineFully(item);
     return deleteMissionFully(item);
@@ -1265,16 +1238,22 @@
   // ----- 트래커 항목 수정창 (습관·미션·루틴 공통) -----
   function openTrackerSheet(kind, item) {
     trackerEditing = { kind: kind, item: item };
+    const isGoal = kind === 'goal';
     const isArchived = isTrackerArchived(item);
-    const label = { habit: '습관', mission: '미션', routine: '루틴' }[kind];
+    const label = { goal: '목표', habit: '습관', mission: '미션', routine: '루틴' }[kind];
     $('tracker-sheet-title').textContent = label + ' 수정';
-    $('tracker-name').value = item.name;
+    $('tracker-name').value = isGoal ? item.text : item.name;
+    $('tracker-name').maxLength = isGoal ? 100 : 50;
+    // 목표는 주마다 따로 적는 것이라 '보관' 없이 수정·삭제만
+    $('tracker-archive').hidden = isGoal;
     $('tracker-archive').textContent = isArchived ? '보관 해제' : '보관';
-    $('tracker-sheet-hint').textContent = isArchived
-      ? '보관 중인 ' + label + '이에요'
-      : kind === 'routine'
-        ? '보관하면 오늘부터 목록에서 사라지고, 어제까지의 기록은 그대로 남아요'
-        : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
+    $('tracker-sheet-hint').textContent = isGoal
+      ? ''
+      : isArchived
+        ? '보관 중인 ' + label + '이에요'
+        : kind === 'routine'
+          ? '보관하면 오늘부터 목록에서 사라지고, 어제까지의 기록은 그대로 남아요'
+          : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
 
     // 미션만: 목표 횟수
     const isMission = kind === 'mission';
@@ -1307,12 +1286,15 @@
       if (!(t >= 1 && t <= 99)) { shake($('tracker-target')); return; }
       if (t !== missionTarget(item, trackerWeek)) newTarget = t;
     }
-    if (name === item.name && newTarget === null) { closeSheet(); return; }
+    const original = kind === 'goal' ? item.text : item.name;
+    if (name === original && newTarget === null) { closeSheet(); return; }
 
     busy = true;
     try {
       // 이름을 바꾸면 지난 주에도 새 이름으로 보임 (기록은 그대로)
-      if (kind === 'habit') {
+      if (kind === 'goal') {
+        await DB.updateWeeklyGoal(item.id, name);
+      } else if (kind === 'habit') {
         await DB.updateHabit(item.id, { name: name });
       } else if (kind === 'routine') {
         await DB.updateRoutine(item.id, { name: name });
@@ -1415,9 +1397,8 @@
   function emptyCard(text) {
     const card = document.createElement('div');
     card.className = 'card placeholder';
-    const emoji = document.createElement('span');
-    emoji.className = 'placeholder-emoji';
-    emoji.textContent = '📚';
+    const emoji = iconEl('book', 'lav');
+    emoji.classList.add('placeholder-icon');
     card.appendChild(emoji);
     card.appendChild(document.createTextNode(text));
     return card;
@@ -1441,7 +1422,10 @@
 
     const card = el('div', 'card');
     const total = items.filter((it) => it.occurrence.status === 'done').length;
-    card.appendChild(el('h2', 'card-title', '✅ 완료한 할 일 ' + total + '개'));
+    const doneTitle = el('h2', 'card-title');
+    doneTitle.appendChild(iconEl('check', 'mint'));
+    doneTitle.appendChild(document.createTextNode('완료한 할 일 ' + total + '개'));
+    card.appendChild(doneTitle);
 
     dates.forEach((d) => {
       card.appendChild(el('h3', 'review-date', formatShortDate(d)));
@@ -1530,7 +1514,9 @@
       if (!records.length) return null;
       records.forEach((g) => {
         const li = el('li', 'review-line');
-        li.appendChild(el('span', 'goal-mark', '🎯'));
+        const gm = iconEl('target');
+        gm.classList.add('goal-mark');
+        li.appendChild(gm);
         li.appendChild(el('span', 'review-line-name', g.text));
         list.appendChild(li);
       });
@@ -2257,6 +2243,16 @@
     }
   }
 
+  // ---------- 홈 화면 앱(PWA) ----------
+  // 서비스 워커(sw.js) 등록: 인터넷이 되면 항상 최신 파일, 안 되면 보관한 파일로 열림
+  // 실패해도 앱 사용에는 지장 없음 (그냥 일반 웹페이지처럼 동작)
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('서비스 워커 등록 실패', err);
+    });
+  }
+
   // ---------- 시작 ----------
   async function init() {
     $('app-version').textContent = APP_VERSION;
@@ -2390,6 +2386,7 @@
     try {
       await DB.open();
       DB.requestPersist();   // 결과를 기다리지 않음 (실패해도 앱 사용에 지장 없음)
+      registerServiceWorker();
       categories = await DB.getCategories();
       renderFilterChips();
       await reloadAll();

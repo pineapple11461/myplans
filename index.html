@@ -3,15 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#FFF6EE">
-  <title>나의 생활 플래너</title>
+  <meta name="theme-color" content="#FFFCF6">
+  <title>오늘 한 장</title>
+
+  <!-- 홈 화면에 추가 (PWA): 앱 이름·아이콘·전체 화면 설정 -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="오늘 한 장">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
+
+  <!-- 아이콘 모양 정의: 여기서 한 번 그려 두고 <use href="#i-이름">으로 여러 곳에서 사용 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+      <symbol id="i-sprout" viewBox="0 0 24 24"><path d="M12 21v-9"/><path d="M12 12c0-4 3-7 8-7 0 4-3 7-8 7z"/><path d="M12 14c0-3-2.5-5.5-7-5.5 0 3 2.5 5.5 7 5.5z"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+      <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6 2h12M6 22h12M17 2v4.2a2 2 0 0 1-.6 1.4L12 12l-4.4-4.4A2 2 0 0 1 7 6.2V2M7 22v-4.2a2 2 0 0 1 .6-1.4L12 12l4.4 4.4a2 2 0 0 1 .6 1.4V22"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6M10 3v6.5L7 13v2h10v-2l-3-3.5V3"/></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+      <symbol id="i-flower" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 9.5C10 7.5 10 4 12 3c2 1 2 4.5 0 6.5zM14.5 12c2-2 5.5-2 6.5 0-1 2-4.5 2-6.5 0zM12 14.5c2 2 2 5.5 0 6.5-2-1-2-4.5 0-6.5zM9.5 12c-2 2-5.5 2-6.5 0 1-2 4.5-2 6.5 0z"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4c3-1.5 5.5 1.5 8 0s4.5-1 6 0v9c-1.5-1-3.5-1.5-6 0s-5-1.5-8 0"/></symbol>
+      <symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v2M12 3v2"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H4"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></symbol>
+    </defs>
+  </svg>
 
   <main id="app">
 
@@ -22,24 +51,24 @@
         <h1 class="today-date" id="today-date"></h1>
         <p class="today-sub">오늘도 한 걸음씩 🌷</p>
         <!-- 데이터 백업·복원 열기 -->
-        <button type="button" class="settings-btn" id="open-data" aria-label="데이터 백업·복원">⚙️</button>
+        <button type="button" class="settings-btn" id="open-data" aria-label="설정 · 데이터 백업"><svg class="ic"><use href="#i-sliders"/></svg></button>
       </header>
 
       <div class="card">
-        <h2 class="card-title">⏰ 시간 일정</h2>
+        <h2 class="card-title"><span class="ic-wrap t-butter" aria-hidden="true"><svg class="ic"><use href="#i-clock"/></svg></span>시간 일정</h2>
         <ul class="task-list" id="list-timed"></ul>
         <p class="empty" id="empty-timed">시간이 정해진 일정이 없어요</p>
       </div>
 
       <div class="card">
-        <h2 class="card-title">✏️ 오늘 할 일</h2>
+        <h2 class="card-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic"><use href="#i-pencil"/></svg></span>오늘 할 일</h2>
         <ul class="task-list" id="list-untimed"></ul>
         <p class="empty" id="empty-untimed">오늘 할 일이 없어요. + 버튼으로 추가해 보세요</p>
       </div>
 
       <div class="card card-done" id="done-card" hidden>
         <button type="button" class="done-toggle" id="done-toggle" aria-expanded="false">
-          <span>✅ 완료한 일 <span id="done-count">0</span>개</span>
+          <span class="done-label"><span class="ic-wrap t-mint" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span><span>완료한 일 <span id="done-count">0</span>개</span></span>
           <span class="chevron" aria-hidden="true">▾</span>
         </button>
         <ul class="task-list" id="list-done" hidden></ul>
@@ -52,26 +81,26 @@
     <!-- ========== 2. 전체 할 일 ========== -->
     <section class="screen" data-screen="tasks" hidden>
       <header class="screen-header">
-        <h1 class="screen-title">📋 전체 할 일</h1>
+        <h1 class="screen-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic"><use href="#i-list"/></svg></span>전체 할 일</h1>
       </header>
 
       <!-- 카테고리 필터 (app.js가 버튼을 채움) -->
       <div class="chip-row" id="category-filter" role="group" aria-label="카테고리 필터"></div>
 
       <div class="card card-overdue">
-        <h2 class="card-title">⏳ 기한 지난 할 일 <span class="count" id="count-overdue"></span></h2>
+        <h2 class="card-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic"><use href="#i-hourglass"/></svg></span>기한 지난 할 일 <span class="count" id="count-overdue"></span></h2>
         <ul class="task-list" id="list-overdue"></ul>
         <p class="empty" id="empty-overdue">기한 지난 할 일이 없어요 👍</p>
       </div>
 
       <div class="card">
-        <h2 class="card-title">📌 예정된 할 일 <span class="count" id="count-upcoming"></span></h2>
+        <h2 class="card-title"><span class="ic-wrap t-butter" aria-hidden="true"><svg class="ic"><use href="#i-pin"/></svg></span>예정된 할 일 <span class="count" id="count-upcoming"></span></h2>
         <ul class="task-list" id="list-upcoming"></ul>
         <p class="empty" id="empty-upcoming">예정된 할 일이 없어요</p>
       </div>
 
       <div class="card">
-        <h2 class="card-title">🗂️ 날짜 없는 할 일 <span class="count" id="count-nodate"></span></h2>
+        <h2 class="card-title"><span class="ic-wrap t-lav" aria-hidden="true"><svg class="ic"><use href="#i-inbox"/></svg></span>날짜 없는 할 일 <span class="count" id="count-nodate"></span></h2>
         <ul class="task-list" id="list-nodate"></ul>
         <p class="empty" id="empty-nodate">날짜 없는 할 일이 없어요</p>
       </div>
@@ -80,7 +109,7 @@
     <!-- ========== 3. 달력 ========== -->
     <section class="screen" data-screen="calendar" hidden>
       <header class="screen-header">
-        <h1 class="screen-title">📅 달력</h1>
+        <h1 class="screen-title"><span class="ic-wrap t-mint" aria-hidden="true"><svg class="ic"><use href="#i-cal"/></svg></span>달력</h1>
       </header>
 
       <div class="card cal-card">
@@ -108,7 +137,7 @@
         <ul class="task-list" id="cal-day-list"></ul>
         <p class="empty" id="cal-day-empty">이날 예정된 할 일이 없어요</p>
         <div id="cal-done-section" hidden>
-          <h3 class="sub-title">✅ 이날 완료한 다른 날의 할 일</h3>
+          <h3 class="sub-title"><span class="ic-wrap t-mint" aria-hidden="true"><svg class="ic"><use href="#i-check"/></svg></span>이날 완료한 다른 날의 할 일</h3>
           <ul class="task-list" id="cal-done-list"></ul>
         </div>
       </div>
@@ -117,7 +146,7 @@
     <!-- ========== 4. 트래커 ========== -->
     <section class="screen" data-screen="tracker" hidden>
       <header class="screen-header">
-        <h1 class="screen-title">🌱 트래커</h1>
+        <h1 class="screen-title"><span class="ic-wrap t-mint" aria-hidden="true"><svg class="ic"><use href="#i-sprout"/></svg></span>트래커</h1>
       </header>
 
       <!-- 주 선택 (월요일~일요일) -->
@@ -134,7 +163,7 @@
       <!-- 주간 목표 -->
       <div class="card">
         <div class="card-head">
-          <h2 class="card-title">🎯 주간 목표</h2>
+          <h2 class="card-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic"><use href="#i-target"/></svg></span>주간 목표</h2>
           <button type="button" class="add-toggle" data-form="goal-add-form" aria-expanded="false" aria-label="목표 추가">+</button>
         </div>
         <ul class="goal-list" id="goal-list"></ul>
@@ -149,7 +178,7 @@
       <!-- 주간 습관 -->
       <div class="card">
         <div class="card-head">
-          <h2 class="card-title">🌸 주간 습관</h2>
+          <h2 class="card-title"><span class="ic-wrap t-mint" aria-hidden="true"><svg class="ic"><use href="#i-flower"/></svg></span>주간 습관</h2>
           <button type="button" class="add-toggle" data-form="habit-add-form" aria-expanded="false" aria-label="습관 추가">+</button>
         </div>
         <div class="habit-wrap">
@@ -172,7 +201,7 @@
       <!-- 주간 미션 -->
       <div class="card">
         <div class="card-head">
-          <h2 class="card-title">🏃 주간 미션</h2>
+          <h2 class="card-title"><span class="ic-wrap t-lav" aria-hidden="true"><svg class="ic"><use href="#i-flag"/></svg></span>주간 미션</h2>
           <button type="button" class="add-toggle" data-form="mission-add-form" aria-expanded="false" aria-label="미션 추가">+</button>
         </div>
         <ul class="mission-list" id="mission-list"></ul>
@@ -196,7 +225,7 @@
       <!-- 데일리 루틴 -->
       <div class="card">
         <div class="card-head">
-          <h2 class="card-title">☀️ 데일리 루틴 <span class="count" id="routine-progress"></span></h2>
+          <h2 class="card-title"><span class="ic-wrap t-butter" aria-hidden="true"><svg class="ic"><use href="#i-cup"/></svg></span>데일리 루틴 <span class="count" id="routine-progress"></span></h2>
           <button type="button" class="add-toggle" data-form="routine-add-form" aria-expanded="false" aria-label="루틴 추가">+</button>
         </div>
         <div class="day-chips" id="routine-days" role="group" aria-label="날짜 선택"></div>
@@ -219,7 +248,7 @@
     <!-- ========== 5. 리뷰 및 기록 ========== -->
     <section class="screen" data-screen="review" hidden>
       <header class="screen-header">
-        <h1 class="screen-title">📖 리뷰 및 기록</h1>
+        <h1 class="screen-title"><span class="ic-wrap t-lav" aria-hidden="true"><svg class="ic"><use href="#i-book"/></svg></span>리뷰 및 기록</h1>
       </header>
 
       <!-- 기록 종류 탭 -->
@@ -383,7 +412,7 @@
   <!-- 데이터 백업·복원: 아래에서 올라오는 창 -->
   <div class="sheet sheet-tall" id="data-sheet" role="dialog" aria-labelledby="data-sheet-title">
     <div class="sheet-handle" aria-hidden="true"></div>
-    <h2 class="sheet-label" id="data-sheet-title">💾 데이터 백업 · 복원</h2>
+    <h2 class="sheet-label" id="data-sheet-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic"><use href="#i-sliders"/></svg></span>설정 · 데이터 백업</h2>
 
     <div class="data-block">
       <h3 class="data-title">백업</h3>
@@ -428,23 +457,23 @@
   <!-- 하단 메뉴 -->
   <nav class="bottom-nav" aria-label="주요 화면">
     <button type="button" class="nav-btn active" data-target="today" aria-current="page">
-      <span class="nav-icon">☀️</span><span class="nav-label">오늘</span>
+      <span class="nav-icon"><svg class="ic"><use href="#i-sun"/></svg></span><span class="nav-label">오늘</span>
     </button>
     <button type="button" class="nav-btn" data-target="tasks">
-      <span class="nav-icon">📋</span><span class="nav-label">전체 할 일</span>
+      <span class="nav-icon"><svg class="ic"><use href="#i-list"/></svg></span><span class="nav-label">전체 할 일</span>
     </button>
     <button type="button" class="nav-btn" data-target="calendar">
-      <span class="nav-icon">📅</span><span class="nav-label">달력</span>
+      <span class="nav-icon"><svg class="ic"><use href="#i-cal"/></svg></span><span class="nav-label">달력</span>
     </button>
     <button type="button" class="nav-btn" data-target="tracker">
-      <span class="nav-icon">🌱</span><span class="nav-label">트래커</span>
+      <span class="nav-icon"><svg class="ic"><use href="#i-sprout"/></svg></span><span class="nav-label">트래커</span>
     </button>
     <button type="button" class="nav-btn" data-target="review">
-      <span class="nav-icon">📖</span><span class="nav-label">기록</span>
+      <span class="nav-icon"><svg class="ic"><use href="#i-book"/></svg></span><span class="nav-label">기록</span>
     </button>
   </nav>
 
-  <script src="db.js?v=19" defer></script>
-  <script src="app.js?v=19" defer></script>
+  <script src="db.js?v=25" defer></script>
+  <script src="app.js?v=25" defer></script>
 </body>
 </html>
