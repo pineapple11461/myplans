@@ -921,3 +921,37 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 .routine-list { list-style: none; margin-top: 4px; }
 .routine-name { cursor: pointer; }
 .check:disabled { opacity: 0.35; cursor: default; }
+
+/* =========================================
+   트래커 카드 제목 옆 + 버튼 (추가 줄 열기/닫기)
+   ========================================= */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-head .card-title { margin-bottom: 0; }
+.add-toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--pink-soft);
+  color: var(--pink-dark);
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
+/* 열려 있을 때는 45도 돌려서 ✕ 모양 (닫기) */
+.add-toggle[aria-expanded="true"] {
+  transform: rotate(45deg);
+  background: var(--pink);
+  color: #fff;
+}

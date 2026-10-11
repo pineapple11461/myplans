@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v12';
+  const APP_VERSION = 'v13';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -1787,6 +1787,19 @@
     });
     $('tracker-delete').addEventListener('click', () => {
       if (trackerEditing) deleteTrackerFully(trackerEditing.kind, trackerEditing.item);
+    });
+    // 카드 제목 옆 + 버튼: 누르면 추가 줄이 열리고, 다시 누르면 닫힘
+    document.querySelectorAll('.add-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const form = $(btn.dataset.form);
+        const willOpen = form.hidden;
+        form.hidden = !willOpen;
+        btn.setAttribute('aria-expanded', String(willOpen));
+        if (willOpen) {
+          const input = form.querySelector('input');
+          if (input) input.focus();
+        }
+      });
     });
     $('mission-add-form').addEventListener('submit', addMission);
     $('routine-add-form').addEventListener('submit', addRoutine);

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 
@@ -131,10 +131,13 @@
 
       <!-- 주간 목표 -->
       <div class="card">
-        <h2 class="card-title">🎯 주간 목표</h2>
+        <div class="card-head">
+          <h2 class="card-title">🎯 주간 목표</h2>
+          <button type="button" class="add-toggle" data-form="goal-add-form" aria-expanded="false" aria-label="목표 추가">+</button>
+        </div>
         <ul class="goal-list" id="goal-list"></ul>
-        <p class="empty" id="goal-empty">이 주의 목표를 적어 보세요</p>
-        <form class="inline-add" id="goal-add-form" autocomplete="off">
+        <p class="empty" id="goal-empty">이 주의 목표를 + 버튼으로 적어 보세요</p>
+        <form class="inline-add" id="goal-add-form" autocomplete="off" hidden>
           <input type="text" id="goal-add-input" class="sheet-input"
                  placeholder="목표 추가" maxlength="100" enterkeyhint="done">
           <button type="submit" class="btn btn-primary">추가</button>
@@ -143,13 +146,16 @@
 
       <!-- 주간 습관 -->
       <div class="card">
-        <h2 class="card-title">🌸 주간 습관</h2>
+        <div class="card-head">
+          <h2 class="card-title">🌸 주간 습관</h2>
+          <button type="button" class="add-toggle" data-form="habit-add-form" aria-expanded="false" aria-label="습관 추가">+</button>
+        </div>
         <div class="habit-wrap">
           <table class="habit-table" id="habit-table"></table>
         </div>
-        <p class="empty" id="habit-empty">습관을 추가해 보세요</p>
+        <p class="empty" id="habit-empty">+ 버튼으로 습관을 추가해 보세요</p>
         <p class="field-hint habit-help" id="habit-help">칸을 누를 때마다 ✓ 실천 → ✕ 안 함 → 빈칸(미기록) 순서로 바뀌어요 · 습관 이름을 누르면 수정·보관</p>
-        <form class="inline-add" id="habit-add-form" autocomplete="off">
+        <form class="inline-add" id="habit-add-form" autocomplete="off" hidden>
           <input type="text" id="habit-add-input" class="sheet-input"
                  placeholder="습관 추가" maxlength="50" enterkeyhint="done">
           <button type="submit" class="btn btn-primary">추가</button>
@@ -164,10 +170,13 @@
 
       <!-- 주간 미션 -->
       <div class="card">
-        <h2 class="card-title">🏃 주간 미션</h2>
+        <div class="card-head">
+          <h2 class="card-title">🏃 주간 미션</h2>
+          <button type="button" class="add-toggle" data-form="mission-add-form" aria-expanded="false" aria-label="미션 추가">+</button>
+        </div>
         <ul class="mission-list" id="mission-list"></ul>
-        <p class="empty" id="mission-empty">미션을 추가해 보세요 (예: 산책 3회)</p>
-        <form class="inline-add" id="mission-add-form" autocomplete="off">
+        <p class="empty" id="mission-empty">+ 버튼으로 미션을 추가해 보세요 (예: 산책 3회)</p>
+        <form class="inline-add" id="mission-add-form" autocomplete="off" hidden>
           <input type="text" id="mission-add-input" class="sheet-input"
                  placeholder="미션 이름" maxlength="50" enterkeyhint="next">
           <input type="number" id="mission-add-target" class="sheet-input target-input"
@@ -185,11 +194,14 @@
 
       <!-- 데일리 루틴 -->
       <div class="card">
-        <h2 class="card-title">☀️ 데일리 루틴 <span class="count" id="routine-progress"></span></h2>
+        <div class="card-head">
+          <h2 class="card-title">☀️ 데일리 루틴 <span class="count" id="routine-progress"></span></h2>
+          <button type="button" class="add-toggle" data-form="routine-add-form" aria-expanded="false" aria-label="루틴 추가">+</button>
+        </div>
         <div class="day-chips" id="routine-days" role="group" aria-label="날짜 선택"></div>
         <ul class="routine-list" id="routine-list"></ul>
-        <p class="empty" id="routine-empty">매일 하는 루틴을 추가해 보세요 (예: 아침 물 한 잔)</p>
-        <form class="inline-add" id="routine-add-form" autocomplete="off">
+        <p class="empty" id="routine-empty">+ 버튼으로 매일 하는 루틴을 추가해 보세요 (예: 아침 물 한 잔)</p>
+        <form class="inline-add" id="routine-add-form" autocomplete="off" hidden>
           <input type="text" id="routine-add-input" class="sheet-input"
                  placeholder="루틴 추가" maxlength="50" enterkeyhint="done">
           <button type="submit" class="btn btn-primary">추가</button>
@@ -371,7 +383,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=12" defer></script>
-  <script src="app.js?v=12" defer></script>
+  <script src="db.js?v=13" defer></script>
+  <script src="app.js?v=13" defer></script>
 </body>
 </html>
