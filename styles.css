@@ -1233,3 +1233,123 @@ body {
 /* ----- 탭·필터: 종이 위에 붙은 느낌 ----- */
 .seg-tabs { box-shadow: 0 2px 0 var(--paper-line); border-color: var(--paper-line); }
 .chip { border-color: var(--paper-line); }
+
+/* =========================================================
+   10단계: 크기 통일 (화면마다 조금씩 달랐던 크기를 같은 기준으로 맞춤)
+   기준: 작은 동그라미 28 · 화살표 34 · 설정 36 · 입력칸/버튼 48 · 작은 알약 30 · 목록 글씨 16
+   ========================================================= */
+:root {
+  --dot-size: 28px;      /* 체크, 습관 칸, 미션 ±, 카드 +, 목표 ✕ */
+  --field-h: 48px;       /* 입력칸과 그 옆 버튼 높이 */
+}
+
+/* ----- 작은 동그라미 버튼: 모두 28px ----- */
+.check,
+.hcell,
+.mbtn,
+.add-toggle,
+.icon-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  min-width: var(--dot-size);
+  padding: 0;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+.check { font-size: 0.85rem; }
+.hcell { font-size: 0.82rem; }
+.mbtn { font-size: 1.05rem; font-weight: 700; }
+.add-toggle { font-size: 1.15rem; }
+.icon-btn { font-size: 0.8rem; }
+
+/* 미션 −는 체크와 같은 분홍 테두리, +는 채운 분홍 */
+.mbtn { border: 2px solid var(--pink); color: var(--pink-dark); background: #fff; }
+.mbtn-plus { border: none; background: var(--pink); color: #fff; }
+.mbtn:disabled { border-color: var(--line); color: var(--muted); }
+
+/* 좁은 화면에서는 습관 칸만 조금 작게 (7칸이 들어가야 해서) */
+@media (max-width: 370px) {
+  .hcell { width: 24px; height: 24px; min-width: 24px; font-size: 0.75rem; }
+}
+
+/* ----- 화살표(‹ ›)와 설정 ----- */
+.cal-nav { width: 34px; height: 34px; font-size: 1.25rem; }
+.settings-btn { width: 36px; height: 36px; font-size: 1rem; top: 6px; }
+.today-header { padding-right: 44px; }   /* 날짜가 길어도 설정 버튼과 겹치지 않게 */
+
+/* ----- 입력칸과 버튼 높이: 모두 48px ----- */
+.sheet-input:not(textarea) {
+  height: var(--field-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: normal;
+}
+textarea.sheet-input { padding: 12px 14px; }
+input[type="date"].sheet-input,
+input[type="time"].sheet-input { min-height: var(--field-h); }
+.inline-add .btn { height: var(--field-h); padding-top: 0; padding-bottom: 0; }
+.btn { min-height: 44px; }
+.sheet-actions .btn { height: 44px; padding-top: 0; padding-bottom: 0; }
+
+/* 한 줄 전체 버튼(백업 창): 모두 같은 높이·글씨 */
+.btn-block { height: 46px; padding: 0 12px; font-size: 1rem; display: flex; align-items: center; justify-content: center; }
+
+/* 건너뛰기 · 반복 중단 등 두 개 나란한 버튼 */
+.occ-actions .btn-soft { height: 40px; min-height: 40px; padding: 0 8px; font-size: 0.9rem; }
+
+/* 보관 목록의 작은 버튼 */
+.archived-btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 0.8rem; }
+
+/* ----- 작은 알약 버튼: 모두 30px ----- */
+.cal-today-btn,
+.review-go {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 15px;
+}
+
+/* ----- 목록 글씨와 줄 간격 ----- */
+.mission-name { font-size: 1rem; }
+.review-line-name { font-size: 0.95rem; }
+.goal-item,
+.task-item,
+.mission-item { padding-top: 10px; padding-bottom: 10px; }
+.goal-item { min-height: 48px; }
+.cal-row { min-height: 48px; }
+.review-line { padding-top: 8px; padding-bottom: 8px; }
+
+/* 횟수 글씨: 습관·미션·리뷰 모두 같은 크기 */
+.habit-count,
+.mission-count,
+.review-line-count { font-size: 0.85rem; }
+
+/* 카드 제목 줄과 + 버튼 세로 정렬 */
+.card-head { min-height: 30px; }
+
+/* 기록 화면 주 제목: '이번 주'가 두 줄로 쪼개지지 않게 */
+.review-week-title { flex: 1; min-width: 0; }
+.review-week-title .count {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--pink-dark);
+  background: var(--pink-soft);
+  border-radius: 9px;
+  padding: 0 7px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* 수정창: 날짜 줄 아래 안내 문구가 없을 때 빈 칸이 생기지 않게 */
+.field-row { margin-bottom: 12px; }
+.field-hint:empty { display: none; }
+#edit-date-hint { margin-top: -4px; }
