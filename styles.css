@@ -1240,7 +1240,7 @@ body {
    ========================================================= */
 :root {
   --dot-size: 28px;      /* 체크, 습관 칸, 미션 ±, 카드 +, 목표 ✕ */
-  --field-h: 48px;       /* 입력칸과 그 옆 버튼 높이 */
+  --field-h: 44px;       /* 입력칸과 그 옆 버튼 높이 */
 }
 
 /* ----- 작은 동그라미 버튼: 모두 28px ----- */
@@ -1292,11 +1292,11 @@ textarea.sheet-input { padding: 12px 14px; }
 input[type="date"].sheet-input,
 input[type="time"].sheet-input { min-height: var(--field-h); }
 .inline-add .btn { height: var(--field-h); padding-top: 0; padding-bottom: 0; }
-.btn { min-height: 44px; }
-.sheet-actions .btn { height: 44px; padding-top: 0; padding-bottom: 0; }
+.btn { min-height: 40px; }
+.sheet-actions .btn { height: 40px; min-height: 40px; padding: 0 16px; font-size: 0.95rem; border-radius: 12px; }
 
 /* 한 줄 전체 버튼(백업 창): 모두 같은 높이·글씨 */
-.btn-block { height: 46px; padding: 0 12px; font-size: 1rem; display: flex; align-items: center; justify-content: center; }
+.btn-block { height: 44px; padding: 0 12px; font-size: 0.95rem; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
 
 /* 건너뛰기 · 반복 중단 등 두 개 나란한 버튼 */
 .occ-actions .btn-soft { height: 40px; min-height: 40px; padding: 0 8px; font-size: 0.9rem; }
@@ -1350,6 +1350,54 @@ input[type="time"].sheet-input { min-height: var(--field-h); }
 }
 
 /* 수정창: 날짜 줄 아래 안내 문구가 없을 때 빈 칸이 생기지 않게 */
-.field-row { margin-bottom: 12px; }
+.field-row { margin-bottom: 10px; }
 .field-hint:empty { display: none; }
 #edit-date-hint { margin-top: -4px; }
+
+/* =========================================================
+   입력창·버튼 여백 정리 (덜 투박하게)
+   창 안 간격은 10px 기준, 버튼은 작고 가볍게
+   ========================================================= */
+.sheet { padding: 8px 18px calc(16px + env(safe-area-inset-bottom)); }
+.sheet-handle { margin-bottom: 10px; }
+.sheet-label { margin-bottom: 8px; }
+
+.field { margin-bottom: 10px; }
+.field label { margin-bottom: 3px; font-size: 0.82rem; }
+.field-row { gap: 8px; }
+.field-row .field { margin-bottom: 0; }
+
+/* 입력칸: 테두리를 얇게, 좌우 여백을 조금 줄임 */
+.sheet-input {
+  border-width: 1.5px;
+  border-radius: 12px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.input-clear .sheet-input { padding-right: 32px; }
+textarea.sheet-input { padding: 10px 12px; }
+.clear-btn { width: 24px; height: 24px; right: 6px; }
+
+/* 아래 버튼 줄: 위쪽 간격과 버튼 사이 간격 줄이기 */
+.sheet-actions { margin-top: 12px; gap: 6px; }
+.sheet-actions .btn-danger { padding: 0 6px; }
+
+/* 눌리는 그림자는 얇게 */
+.btn-primary { box-shadow: 0 2px 0 #D9849A; }
+.btn-primary:active { transform: translateY(1px); box-shadow: 0 1px 0 #D9849A; }
+
+/* 카드 안 추가 줄 */
+.inline-add { margin-top: 8px; gap: 6px; }
+.inline-add .btn { padding: 0 14px; font-size: 0.95rem; border-radius: 12px; }
+.inline-add .target-input { width: 52px; }
+
+/* 수정창 안의 작은 버튼 줄 (건너뛰기 · 반복 중단) */
+.occ-actions { gap: 6px; margin-bottom: 10px; }
+.occ-actions .btn-soft { height: 38px; min-height: 38px; border-radius: 12px; }
+
+/* 예정일/완료일 기준 선택 */
+.seg { border-width: 1.5px; border-radius: 12px; }
+.seg-item span { padding: 7px 4px; }
+
+/* 백업 창 */
+.data-block { padding: 12px; margin-bottom: 10px; border-radius: 14px; }
