@@ -45,6 +45,65 @@ const DB = (function () {
     return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   }
 
+  // ---------- 반복 날짜 계산 ----------
+
+  const FREQUENCIES = {
+    daily:      { days: 1,    label: '매일',      unit: '1일' },
+    weekly:     { days: 7,    label: '매주',      unit: '1주' },
+    biweekly:   { days: 14,   label: '2주마다',   unit: '2주' },
+    monthly:    { months: 1,  label: '매월',      unit: '1개월' },
+    quarterly:  { months: 3,  label: '3개월마다', unit: '3개월' },
+    semiannual: { months: 6,  label: '6개월마다', unit: '6개월' },
+    yearly:     { months: 12, label: '매년',      unit: '1년' }
+  };
+
+  function parseDate(str) {
+    const p = str.split('-').map(Number);
+    return { y: p[0], m: p[1], d: p[2] };
+  }
+
+  function daysInMonth(y, m) {          // m: 1~12
+    return new Date(y, m, 0).getDate();
+  }
+
+  // 기준일(anchorDate)에서 n번째(0부터) 반복 날짜
+  // 월 단위 반복은 '원래 기준일(anchorDay)'로 매번 새로 계산하므로
+  // 31일 → 2월 28일 → 3월 31일처럼 원래 날짜로 돌아옴 (그 달에 없으면 마지막 날)
+  function nthDate(anchorDate, frequency, n, anchorDay) {
+    const f = FREQUENCIES[frequency];
+    const a = parseDate(anchorDate);
+    if (f.days) {
+      return toDateStr(new Date(a.y, a.m - 1, a.d + f.days * n));
+    }
+    const total = (a.m - 1) + f.months * n;
+    const y = a.y + Math.floor(total / 12);
+    const m = (total % 12) + 1;
+    const day = Math.min(anchorDay || a.d, daysInMonth(y, m));
+    return toDateStr(new Date(y, m - 1, day));
+  }
+
+  // 완료일 기준 반복: 완료(또는 건너뛴) 날에서 한 주기 뒤
+  function nextFromBase(frequency, baseDate) {
+    return nthDate(baseDate, frequency, 1, parseDate(baseDate).d);
+  }
+
+  // 반복 규칙 만들기. repeat: { frequency, basis }
+  function makeRule(taskId, repeat, anchorDate, time, now) {
+    return {
+      id: newId(),
+      taskId: taskId,
+      frequency: repeat.frequency,
+      basis: repeat.basis === 'completed' ? 'completed' : 'scheduled',  // 기본: 예정일 기준
+      anchorDate: anchorDate,                 // 첫 회차 날짜 (계산 기준)
+      anchorDay: parseDate(anchorDate).d,     // 원래 기준일 (예: 31)
+      time: time || null,                     // 새로 생기는 회차의 기본 시간
+      nextIndex: 1,                           // 예정일 기준: 다음에 만들 회차 번호 (0번은 만들 때 생성)
+      active: true,                           // false = 중단됨 (앞으로 생성 안 함)
+      createdAt: now,
+      endedAt: null
+    };
+  }
+
   // ---------- 데이터베이스 열기 ----------
 
   // 버전 1: 서랍 12개 만들기
@@ -151,9 +210,10 @@ const DB = (function () {
 
   // ---------- 할 일 ----------
 
-  // 새 할 일: 할 일 1개 + 회차 기록 1개를 한 번에 저장
-  // fields: { title, categoryId, memo, date, time }
+  // 새 할 일: 할 일 1개 + 회차 기록 1개 (+ 반복 규칙)를 한 번에 저장
+  // fields: { title, categoryId, memo, date, time, repeat }
   //   date: 'YYYY-MM-DD' 또는 null(날짜 없음), time: 'HH:MM' 또는 null
+  //   repeat: { frequency, basis } 또는 null (날짜가 있어야 반복 가능)
   function addTask(fields) {
     const now = nowISO();
     const date = fields.date || null;
@@ -178,9 +238,17 @@ const DB = (function () {
       updatedAt: now
     };
 
-    return run(['tasks', 'occurrences'], 'readwrite', (tx) => {
+    let rule = null;
+    if (fields.repeat && date) {
+      rule = makeRule(task.id, fields.repeat, date, occurrence.time, now);
+      occurrence.ruleId = rule.id;
+      occurrence.seq = 0;         // 이 규칙의 0번째 회차
+    }
+
+    return run(['tasks', 'occurrences', 'rules'], 'readwrite', (tx) => {
       tx.objectStore('tasks').add(task);
       tx.objectStore('occurrences').add(occurrence);
+      if (rule) tx.objectStore('rules').add(rule);
       return { task: task, occurrence: occurrence };
     });
   }
@@ -190,15 +258,24 @@ const DB = (function () {
     return addTask({ title: title, date: dateStr });
   }
 
-  // 회차 색인으로 찾은 회차 + 해당 할 일 정보를 함께 가져오기
-  // 돌려주는 값: [{ occurrence, task }, ...]
+  // 회차 색인으로 찾은 회차 + 해당 할 일 정보 + 진행 중인 반복 규칙을 함께 가져오기
+  // 돌려주는 값: [{ occurrence, task, rule }, ...]  (rule: 반복 중이 아니면 null)
   async function getItemsByIndex(indexName, key) {
     const db = await open();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(['occurrences', 'tasks'], 'readonly');
+      const tx = db.transaction(['occurrences', 'tasks', 'rules'], 'readonly');
       const items = [];
-      tx.oncomplete = () => resolve(items);
+      const activeRuleByTask = {};
+      tx.oncomplete = () => {
+        items.forEach((it) => { it.rule = activeRuleByTask[it.task.id] || null; });
+        resolve(items);
+      };
       tx.onerror = () => reject(tx.error);
+
+      const rReq = tx.objectStore('rules').getAll();
+      rReq.onsuccess = () => rReq.result.forEach((rule) => {
+        if (rule.active) activeRuleByTask[rule.taskId] = rule;
+      });
 
       const req = tx.objectStore('occurrences').index(indexName).getAll(key);
       req.onsuccess = () => {
@@ -222,13 +299,17 @@ const DB = (function () {
     return getItemsByIndex('status', 'pending');
   }
 
-  // 회차 1개 + 할 일 정보 (없으면 null)
+  // 회차 1개 + 할 일 정보 + 진행 중인 반복 규칙 (없으면 null)
   async function getItem(occurrenceId) {
     const db = await open();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(['occurrences', 'tasks'], 'readonly');
+      const tx = db.transaction(['occurrences', 'tasks', 'rules'], 'readonly');
       let item = null;
-      tx.oncomplete = () => resolve(item);
+      let activeRule = null;
+      tx.oncomplete = () => {
+        if (item) item.rule = activeRule;
+        resolve(item);
+      };
       tx.onerror = () => reject(tx.error);
 
       const req = tx.objectStore('occurrences').get(occurrenceId);
@@ -239,20 +320,30 @@ const DB = (function () {
         tReq.onsuccess = () => {
           if (tReq.result) item = { occurrence: occ, task: tReq.result };
         };
+        const rReq = tx.objectStore('rules').index('taskId').getAll(occ.taskId);
+        rReq.onsuccess = () => {
+          activeRule = rReq.result.find((r) => r.active) || null;
+        };
       };
     });
   }
 
-  // 할 일 수정 (할 일 정보 + 회차 정보를 한 번에 저장)
-  // fields: { title, categoryId, memo, date, time, completedDate }
+  // 할 일 수정 (할 일 정보 + 회차 정보 + 반복 규칙을 한 번에 저장)
+  // fields: { title, categoryId, memo, date, time, completedDate,
+  //           repeat, repeatChanged, applyTimeToRule }
   // 날짜 규칙:
   //   - 처음으로 날짜를 정하는 경우(원래 예정일이 없음): 원래 예정일 = 변경된 예정일 = 새 날짜
   //   - 이미 원래 예정일이 있으면: 변경된 예정일만 바꾸고 원래 예정일은 보존
+  //   - 날짜 변경은 이 회차에만 적용 (다른 회차와 반복 일정은 그대로)
   // 실제 완료일은 완료된 회차에서만 바꿈
+  // 반복 설정 변경(repeatChanged): 미완료 회차에서만 가능.
+  //   기존 규칙은 지우지 않고 '중단'으로 표시, 이 회차부터 새 규칙 시작.
+  //   기존 규칙으로 이미 만들어진 미완료 회차는 그대로 둠.
   function updateItem(occurrenceId, fields) {
-    return run(['occurrences', 'tasks'], 'readwrite', (tx) => {
+    return run(['occurrences', 'tasks', 'rules'], 'readwrite', (tx) => {
       const occStore = tx.objectStore('occurrences');
       const taskStore = tx.objectStore('tasks');
+      const ruleStore = tx.objectStore('rules');
       const now = nowISO();
 
       const req = occStore.get(occurrenceId);
@@ -260,6 +351,7 @@ const DB = (function () {
         const occ = req.result;
         if (!occ) { tx.abort(); return; }
 
+        // 1) 할 일 정보: 모든 회차(과거 기록 포함)에 공통으로 적용됨
         const tReq = taskStore.get(occ.taskId);
         tReq.onsuccess = () => {
           const task = tReq.result;
@@ -271,14 +363,76 @@ const DB = (function () {
           taskStore.put(task);
         };
 
+        // 2) 이 회차의 날짜·시간
         const newDate = fields.date || null;
+        const newTime = newDate ? (fields.time || null) : null;
         if (occ.originalDate === null) occ.originalDate = newDate;
         occ.scheduledDate = newDate;
-        occ.time = newDate ? (fields.time || null) : null;
+        occ.time = newTime;
+        occ.auto = false;            // 사용자가 손댄 회차 (자동 정리 대상에서 제외)
+        occ.updatedAt = now;
+
+        // 3) 실제 완료일
+        const oldCompleted = occ.completedDate;
         if (occ.status === 'done' && fields.completedDate) {
           occ.completedDate = fields.completedDate;
         }
-        occ.updatedAt = now;
+        const completedChanged = occ.status === 'done' && occ.completedDate !== oldCompleted;
+
+        // 4-a) 반복 설정 변경
+        if (fields.repeatChanged && occ.status === 'pending') {
+          const rq = ruleStore.index('taskId').getAll(occ.taskId);
+          rq.onsuccess = () => {
+            rq.result.forEach((rule) => {
+              if (rule.active) {
+                rule.active = false;
+                rule.endedAt = now;
+                ruleStore.put(rule);
+              }
+            });
+            if (fields.repeat && newDate) {
+              const rule = makeRule(occ.taskId, fields.repeat, newDate, newTime, now);
+              ruleStore.add(rule);
+              occ.ruleId = rule.id;
+              occ.seq = 0;
+              occ.generatedFrom = null;
+            }
+            occStore.put(occ);
+          };
+          return;   // occ는 위에서 저장
+        }
+
+        // 4-b) 시간을 앞으로 생길 회차에도 적용
+        if (fields.applyTimeToRule && occ.ruleId) {
+          const rr = ruleStore.get(occ.ruleId);
+          rr.onsuccess = () => {
+            const rule = rr.result;
+            if (rule && rule.active) {
+              rule.time = newTime;
+              ruleStore.put(rule);
+            }
+          };
+        }
+
+        // 4-c) 완료일 기준 반복에서 완료일을 고치면, 자동으로 만들어진 다음 회차 날짜도 맞춰 줌
+        if (completedChanged && occ.ruleId) {
+          const rr = ruleStore.get(occ.ruleId);
+          rr.onsuccess = () => {
+            const rule = rr.result;
+            if (!rule || rule.basis !== 'completed') return;
+            const cq = occStore.index('taskId').getAll(occ.taskId);
+            cq.onsuccess = () => cq.result.forEach((child) => {
+              if (child.generatedFrom === occ.id && child.status === 'pending' && child.auto) {
+                const d = nextFromBase(rule.frequency, occ.completedDate);
+                child.originalDate = d;
+                child.scheduledDate = d;
+                child.updatedAt = now;
+                occStore.put(child);
+              }
+            });
+          };
+        }
+
         occStore.put(occ);
       };
     });
@@ -296,11 +450,25 @@ const DB = (function () {
     });
   }
 
-  // 할 일의 완료 기록 개수 (삭제 확인 메시지용)
-  function countDoneOccurrences(taskId) {
+  // 할 일의 회차 개수 (삭제 확인 메시지용): { total, done }
+  function countOccurrences(taskId) {
     return run(['occurrences'], 'readonly',
       (tx) => tx.objectStore('occurrences').index('taskId').getAll(taskId))
-      .then((list) => list.filter((o) => o.status === 'done').length);
+      .then((list) => ({
+        total: list.length,
+        done: list.filter((o) => o.status === 'done').length
+      }));
+  }
+
+  // 완료(또는 건너뛰기)를 취소할 때:
+  // 그 회차를 완료해서 '자동으로' 생긴 다음 회차가 아직 손대지 않은 미완료 상태면 지움.
+  // (완료일 기준 반복에서 완료 → 취소를 반복해도 회차가 중복으로 쌓이지 않게 하기 위함.
+  //  사용자가 수정한 회차나 완료한 회차는 절대 지우지 않음)
+  function removeAutoChildren(store, occ) {
+    const req = store.index('taskId').getAll(occ.taskId);
+    req.onsuccess = () => req.result.forEach((o) => {
+      if (o.generatedFrom === occ.id && o.status === 'pending' && o.auto) store.delete(o.id);
+    });
   }
 
   // 회차 완료 / 완료 취소
@@ -320,7 +488,115 @@ const DB = (function () {
         occ.completedDate = done ? completedDate : null;
         occ.updatedAt = nowISO();
         store.put(occ);
+        if (!done) removeAutoChildren(store, occ);
       };
+    });
+  }
+
+  // 이번 회차 건너뛰기 / 건너뛰기 취소 (기록은 '건너뜀'으로 남음)
+  function setOccurrenceSkipped(occurrenceId, skipped, skippedDate) {
+    return run(['occurrences'], 'readwrite', (tx) => {
+      const store = tx.objectStore('occurrences');
+      const req = store.get(occurrenceId);
+      req.onsuccess = () => {
+        const occ = req.result;
+        if (!occ) { tx.abort(); return; }
+        occ.status = skipped ? 'skipped' : 'pending';
+        occ.skippedDate = skipped ? skippedDate : null;
+        occ.completedDate = null;
+        occ.updatedAt = nowISO();
+        store.put(occ);
+        if (!skipped) removeAutoChildren(store, occ);
+      };
+    });
+  }
+
+  // 반복 중단: 규칙만 '중단'으로 표시. 지난 기록과 남은 미완료 회차는 그대로
+  function stopRule(ruleId) {
+    return run(['rules'], 'readwrite', (tx) => {
+      const store = tx.objectStore('rules');
+      const req = store.get(ruleId);
+      req.onsuccess = () => {
+        const rule = req.result;
+        if (!rule) return;
+        rule.active = false;
+        rule.endedAt = nowISO();
+        store.put(rule);
+      };
+    });
+  }
+
+  // ---------- 반복 회차 만들기 ----------
+  // 앱을 열 때와 데이터가 바뀔 때마다 실행. 필요한 회차만 만들고, 이미 있는 회차는 건드리지 않음.
+  //
+  // 예정일 기준: 오늘까지 도래한 회차를 모두 만들고(놓친 회차는 '기한 지남'으로 남음),
+  //             다음 회차 1개를 미리 만들어 둠 (미리 완료·날짜 변경 가능하도록)
+  // 완료일 기준: 미완료 회차가 없을 때만, 마지막 회차의 완료일(또는 건너뛴 날)에서 한 주기 뒤 회차를 만듦
+  const MAX_CREATE = 1000;   // 안전장치: 한 번에 만드는 최대 회차 수
+
+  function syncRecurrences(todayStr) {
+    return run(['rules', 'occurrences'], 'readwrite', (tx) => {
+      const ruleStore = tx.objectStore('rules');
+      const occStore = tx.objectStore('occurrences');
+      const now = nowISO();
+
+      function create(rule, date, seq, fromId) {
+        occStore.add({
+          id: newId(),
+          taskId: rule.taskId,
+          ruleId: rule.id,
+          originalDate: date,
+          scheduledDate: date,
+          time: rule.time,
+          status: 'pending',
+          completedDate: null,
+          seq: seq,
+          generatedFrom: fromId || null,
+          auto: true,                 // 자동으로 만든 회차 (아직 손대지 않음)
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+
+      function syncScheduled(rule) {
+        const dateAt = (k) => nthDate(rule.anchorDate, rule.frequency, k, rule.anchorDay);
+        const start = rule.nextIndex;
+        let k = start;
+        let count = 0;
+        while (count < MAX_CREATE && dateAt(k) <= todayStr) {
+          create(rule, dateAt(k), k);
+          k++;
+          count++;
+        }
+        // 직전 회차가 오늘 이전이면 다음 회차 1개를 미리 만들어 둠
+        if (dateAt(k - 1) <= todayStr) {
+          create(rule, dateAt(k), k);
+          k++;
+        }
+        if (k !== start) {
+          rule.nextIndex = k;
+          ruleStore.put(rule);
+        }
+      }
+
+      function syncCompleted(rule) {
+        const req = occStore.index('taskId').getAll(rule.taskId);
+        req.onsuccess = () => {
+          const list = req.result.filter((o) => o.ruleId === rule.id);
+          if (!list.length || list.some((o) => o.status === 'pending')) return;
+          const latest = list.reduce((a, b) => ((b.seq || 0) > (a.seq || 0) ? b : a));
+          const base = latest.status === 'done' ? latest.completedDate : latest.skippedDate;
+          if (!base) return;
+          create(rule, nextFromBase(rule.frequency, base), (latest.seq || 0) + 1, latest.id);
+        };
+      }
+
+      const req = ruleStore.getAll();
+      req.onsuccess = () => req.result.forEach((rule) => {
+        if (!rule.active || !FREQUENCIES[rule.frequency]) return;
+        if (rule.basis === 'completed') syncCompleted(rule);
+        else syncScheduled(rule);
+      });
     });
   }
 
@@ -348,10 +624,15 @@ const DB = (function () {
     getItem: getItem,
     updateItem: updateItem,
     setOccurrenceDone: setOccurrenceDone,
+    setOccurrenceSkipped: setOccurrenceSkipped,
+    stopRule: stopRule,
+    syncRecurrences: syncRecurrences,
     deleteTask: deleteTask,
-    countDoneOccurrences: countDoneOccurrences,
+    countOccurrences: countOccurrences,
     getSetting: getSetting,
-    getCategories: getCategories
+    getCategories: getCategories,
+    FREQUENCIES: FREQUENCIES,
+    nthDate: nthDate
   };
 
 })();

@@ -188,6 +188,9 @@
       if (occ.originalDate && occ.originalDate !== occ.scheduledDate) {
         add('원래 ' + formatShortDate(occ.originalDate));
       }
+      if (item.rule && DB.FREQUENCIES[item.rule.frequency]) {
+        add('🔁 ' + DB.FREQUENCIES[item.rule.frequency].label, 'meta-repeat');
+      }
       const cat = categoryName(item.task.categoryId);
       if (cat) add(cat, 'meta-chip');
       if (item.task.memo) add('📝');
@@ -243,7 +246,9 @@
   }
 
   // 데이터가 바뀐 뒤 두 화면을 모두 다시 그림
+  // (먼저 반복 규칙에 따라 필요한 회차를 만들어 둠)
   async function reloadAll() {
+    await DB.syncRecurrences(todayStr);
     await Promise.all([loadToday(), loadTasks()]);
   }
 
@@ -314,6 +319,7 @@
   function openSheet() {
     const input = $('quick-add-input');
     input.value = '';
+    hideToast();
     $('sheet-backdrop').classList.add('open');
     $('quick-add-sheet').classList.add('open');
     // 입력창이 보이기 시작한 뒤에 커서를 넣어야 키보드가 안정적으로 열림
@@ -375,9 +381,107 @@
     }
     if (!hasDate) hints.push('날짜를 비우면 \'날짜 없는 할 일\'로 저장돼요');
     $('edit-date-hint').textContent = hints.join(' · ');
+
+    updateRepeatFields();   // 날짜·시간에 따라 반복 안내도 바뀜
+  }
+
+  // ---------- 반복 설정 ----------
+  function getBasis() {
+    const checked = document.querySelector('input[name="edit-basis"]:checked');
+    return checked ? checked.value : 'scheduled';
+  }
+
+  function setBasis(value) {
+    document.querySelectorAll('input[name="edit-basis"]').forEach((r) => {
+      r.checked = r.value === value;
+    });
+  }
+
+  // 수정창에서 고른 반복: { frequency, basis } 또는 null(반복 안 함)
+  function readRepeat() {
+    const f = $('edit-repeat').value;
+    return f ? { frequency: f, basis: getBasis() } : null;
+  }
+
+  // 지금 진행 중인 반복 규칙과 달라졌는지 (수정 모드에서만)
+  function isRepeatChanged() {
+    if (!editing || editing.mode !== 'edit') return false;
+    const rule = editing.item.rule;
+    const now = readRepeat();
+    if (!rule && !now) return false;
+    if (!rule || !now) return true;
+    return rule.frequency !== now.frequency || rule.basis !== now.basis;
+  }
+
+  // 반복 규칙을 사람이 읽기 쉬운 문장으로
+  function describeRepeat(repeat, anchorDate) {
+    const f = DB.FREQUENCIES[repeat.frequency];
+    if (repeat.basis === 'completed') {
+      return '완료한 날로부터 ' + f.unit + ' 뒤에 다음 회차가 생겨요';
+    }
+    const p = anchorDate.split('-').map(Number);
+    const wd = '일월화수목금토'[new Date(p[0], p[1] - 1, p[2]).getDay()];
+    let text;
+    switch (repeat.frequency) {
+      case 'daily':    text = '매일'; break;
+      case 'weekly':   text = '매주 ' + wd + '요일'; break;
+      case 'biweekly': text = '2주마다 ' + wd + '요일'; break;
+      case 'yearly':   text = '매년 ' + p[1] + '월 ' + p[2] + '일'; break;
+      default:         text = f.label + ' ' + p[2] + '일';
+    }
+    const mayNotExist = repeat.frequency === 'yearly'
+      ? (p[1] === 2 && p[2] === 29)
+      : (!f.days && p[2] >= 29);
+    if (mayNotExist) text += ' (그 날짜가 없는 달은 마지막 날)';
+    return text + ' 반복';
+  }
+
+  // 반복 관련 칸·안내·버튼 표시 갱신
+  function updateRepeatFields() {
+    const isEdit = !!(editing && editing.mode === 'edit');
+    const occ = isEdit ? editing.item.occurrence : null;
+    const rule = isEdit ? editing.item.rule : null;
+    const locked = isEdit && occ.status !== 'pending';
+    const repeat = readRepeat();
+    const changed = isRepeatChanged();
+
+    $('edit-repeat').disabled = locked;
+    document.querySelectorAll('input[name="edit-basis"]').forEach((r) => { r.disabled = locked; });
+    $('basis-field').hidden = !repeat;
+
+    let hint = '';
+    if (locked) {
+      hint = rule ? describeRepeat(rule, rule.anchorDate) + ' · 완료하거나 건너뛴 회차에서는 반복 설정을 바꿀 수 없어요' : '';
+    } else if (repeat) {
+      const date = $('edit-date').value;
+      if (rule && !changed) hint = describeRepeat(rule, rule.anchorDate);
+      else if (!date) hint = '반복하려면 날짜를 정해 주세요';
+      else {
+        hint = describeRepeat(repeat, date);
+        if (rule) hint += ' · 저장하면 이 회차부터 새 규칙이 적용돼요 (지난 기록은 그대로)';
+      }
+    } else if (rule) {
+      hint = '저장하면 반복이 중단돼요 (지난 기록과 남은 회차는 그대로)';
+    }
+    $('edit-repeat-hint').textContent = hint;
+
+    // 건너뛰기: 반복으로 생긴 미완료 회차 / 중단: 진행 중인 규칙이 있을 때
+    const canSkip = isEdit && occ.status === 'pending' && !!occ.ruleId;
+    const canStop = isEdit && !!rule && !changed;
+    $('edit-skip').hidden = !canSkip;
+    $('edit-stop').hidden = !canStop;
+    $('occ-actions').hidden = !(canSkip || canStop);
+
+    // 시간 적용 체크: 진행 중인 규칙의 미완료 회차에서 시간을 바꿨을 때만 보임
+    const showApply = isEdit && !!rule && occ.ruleId === rule.id &&
+      occ.status === 'pending' && !changed &&
+      ($('edit-time').value || '') !== (rule.time || '');
+    $('time-apply-line').hidden = !showApply;
+    if (!showApply) $('edit-time-apply').checked = false;
   }
 
   function openEditSheet() {
+    hideToast();
     $('sheet-backdrop').classList.add('open');
     $('edit-sheet').classList.add('open');
     $('edit-sheet').scrollTop = 0;
@@ -392,6 +496,9 @@
     $('edit-date').value = '';
     $('edit-time').value = '';
     $('edit-memo').value = '';
+    $('edit-repeat').value = '';
+    setBasis('scheduled');
+    $('edit-time-apply').checked = false;
     $('edit-completed-field').hidden = true;
     $('edit-delete').hidden = true;
     updateDateFields();
@@ -417,6 +524,9 @@
       $('edit-date').value = occ.scheduledDate || '';
       $('edit-time').value = occ.time || '';
       $('edit-memo').value = item.task.memo || '';
+      $('edit-repeat').value = item.rule ? item.rule.frequency : '';
+      setBasis(item.rule ? item.rule.basis : 'scheduled');
+      $('edit-time-apply').checked = false;
 
       const isDone = occ.status === 'done';
       $('edit-completed-field').hidden = !isDone;
@@ -458,6 +568,18 @@
       fields.completedDate = completed;
     }
 
+    // 반복: 새로 반복을 정하거나 바꿀 때는 날짜가 꼭 필요함
+    const repeat = readRepeat();
+    const repeatChanged = editing.mode === 'new' ? !!repeat : isRepeatChanged();
+    if (repeat && repeatChanged && !fields.date) {
+      $('edit-repeat-hint').textContent = '반복하려면 날짜를 정해 주세요';
+      shake($('edit-date'));
+      return;
+    }
+    fields.repeat = repeat;
+    fields.repeatChanged = repeatChanged;
+    fields.applyTimeToRule = !$('time-apply-line').hidden && $('edit-time-apply').checked;
+
     busy = true;
     try {
       if (editing.mode === 'new') await DB.addTask(fields);
@@ -476,13 +598,20 @@
   async function deleteEditing() {
     if (busy || !editing || editing.mode !== 'edit') return;
     const task = editing.item.task;
+    const recurring = !!editing.item.rule || !!editing.item.occurrence.ruleId;
     try {
-      const doneCount = await DB.countDoneOccurrences(task.id);
-      let msg = '\'' + task.title + '\'을(를) 삭제할까요?';
-      if (doneCount > 0) {
-        msg += '\n\n완료 기록 ' + doneCount + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      const counts = await DB.countOccurrences(task.id);
+      let msg = '\'' + task.title + '\'을(를) 삭제할까요?\n';
+      if (recurring || counts.total > 1) {
+        msg += '\n이 할 일의 모든 회차(' + counts.total + '개)가 삭제돼요.';
       }
-      if (!confirm(msg)) return;
+      if (counts.done > 0) {
+        msg += '\n완료 기록 ' + counts.done + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      }
+      if (editing.item.rule) {
+        msg += '\n\n반복만 멈추려면 \'반복 중단\'을 사용하세요.';
+      }
+      if (!confirm(msg.trim())) return;
 
       busy = true;
       await DB.deleteTask(task.id);
@@ -491,6 +620,56 @@
       showToast('삭제했어요');
     } catch (err) {
       showError('삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 이번 회차 건너뛰기 (기록은 '건너뜀'으로 남고, 다른 회차는 그대로)
+  async function skipEditing() {
+    if (busy || !editing || editing.mode !== 'edit') return;
+    const item = editing.item;
+    busy = true;
+    try {
+      await DB.setOccurrenceSkipped(item.occurrence.id, true, todayStr);
+      closeSheet();
+      await reloadAll();
+      showToast('이번 회차를 건너뛰었어요', '되돌리기', () => undoSkip(item));
+    } catch (err) {
+      showError('건너뛰지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function undoSkip(item) {
+    if (busy) return;
+    busy = true;
+    try {
+      await DB.setOccurrenceSkipped(item.occurrence.id, false, null);
+      await reloadAll();
+    } catch (err) {
+      showError('되돌리지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 반복 중단: 앞으로 새 회차만 안 생김. 지난 기록과 남은 미완료 회차는 유지
+  async function stopEditing() {
+    if (busy || !editing || editing.mode !== 'edit' || !editing.item.rule) return;
+    const ruleId = editing.item.rule.id;
+    const ok = confirm('반복을 중단할까요?\n\n지난 기록과 이미 생긴 미완료 회차는 그대로 남고, ' +
+      '앞으로 새 회차만 생기지 않아요.');
+    if (!ok) return;
+    busy = true;
+    try {
+      await DB.stopRule(ruleId);
+      closeSheet();
+      await reloadAll();
+      showToast('반복을 중단했어요');
+    } catch (err) {
+      showError('반복을 중단하지 못했어요.', err);
     } finally {
       busy = false;
     }
@@ -557,6 +736,12 @@
     $('edit-date').addEventListener('input', updateDateFields);
     $('edit-time').addEventListener('change', updateDateFields);
     $('edit-time').addEventListener('input', updateDateFields);
+    $('edit-repeat').addEventListener('change', updateRepeatFields);
+    document.querySelectorAll('input[name="edit-basis"]').forEach((r) => {
+      r.addEventListener('change', updateRepeatFields);
+    });
+    $('edit-skip').addEventListener('click', skipEditing);
+    $('edit-stop').addEventListener('click', stopEditing);
     document.querySelectorAll('.clear-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         $(btn.dataset.clear).value = '';

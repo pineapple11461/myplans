@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -155,6 +156,46 @@
     </div>
     <p class="field-hint" id="edit-date-hint"></p>
 
+    <label class="check-line" id="time-apply-line" hidden>
+      <input type="checkbox" id="edit-time-apply">
+      <span>앞으로 생길 회차에도 이 시간 적용</span>
+    </label>
+
+    <!-- 반복 설정 -->
+    <div class="field">
+      <label for="edit-repeat">반복</label>
+      <select id="edit-repeat" class="sheet-input">
+        <option value="">반복 안 함</option>
+        <option value="daily">매일</option>
+        <option value="weekly">매주</option>
+        <option value="biweekly">2주마다</option>
+        <option value="monthly">매월</option>
+        <option value="quarterly">3개월마다</option>
+        <option value="semiannual">6개월마다</option>
+        <option value="yearly">매년</option>
+      </select>
+    </div>
+
+    <div class="field" id="basis-field" hidden>
+      <label>다음 날짜 계산 방식</label>
+      <div class="seg" role="radiogroup">
+        <label class="seg-item">
+          <input type="radio" name="edit-basis" value="scheduled" checked>
+          <span>예정일 기준</span>
+        </label>
+        <label class="seg-item">
+          <input type="radio" name="edit-basis" value="completed">
+          <span>완료일 기준</span>
+        </label>
+      </div>
+    </div>
+    <p class="field-hint" id="edit-repeat-hint"></p>
+
+    <div class="occ-actions" id="occ-actions" hidden>
+      <button type="button" class="btn btn-soft" id="edit-skip">이번 회차 건너뛰기</button>
+      <button type="button" class="btn btn-soft" id="edit-stop">반복 중단</button>
+    </div>
+
     <div class="field" id="edit-completed-field" hidden>
       <label for="edit-completed">실제 완료일</label>
       <input type="date" id="edit-completed" class="sheet-input">
@@ -198,7 +239,7 @@
     </button>
   </nav>
 
-  <script src="db.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="db.js?v=4" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>

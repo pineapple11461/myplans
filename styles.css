@@ -417,3 +417,62 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
   cursor: pointer;
   white-space: nowrap;
 }
+
+/* =========================================
+   4단계 추가: 반복 설정
+   ========================================= */
+
+/* 예정일 기준 / 완료일 기준 선택 (두 칸짜리 버튼) */
+.seg {
+  display: flex;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 3px;
+  gap: 3px;
+}
+.seg-item { flex: 1; position: relative; margin: 0; }
+.seg-item input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.seg-item span {
+  display: block;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg-item input:checked + span {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(180, 140, 120, 0.2);
+}
+.seg-item input:disabled + span { cursor: default; opacity: 0.5; }
+
+/* 체크박스 한 줄 */
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  margin: -4px 0 12px;
+  cursor: pointer;
+}
+.check-line input { width: 18px; height: 18px; accent-color: var(--pink); }
+
+/* 건너뛰기 / 반복 중단 */
+.occ-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+.btn-soft {
+  flex: 1;
+  background: var(--pink-soft);
+  color: var(--pink-dark);
+  font-size: 0.9rem;
+  padding: 9px 8px;
+}
+
+/* 목록의 반복 표시 */
+.meta-repeat { color: var(--pink-dark); }
