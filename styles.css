@@ -34,7 +34,8 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-button, input { font: inherit; color: inherit; }
+/* 버튼·입력칸·드롭다운·메모 칸 모두 앱 글씨체를 물려받음 */
+button, input, select, textarea, option { font: inherit; color: inherit; }
 
 /* ---------- 전체 레이아웃 ---------- */
 #app {
@@ -1401,3 +1402,57 @@ textarea.sheet-input { padding: 10px 12px; }
 
 /* 백업 창 */
 .data-block { padding: 12px; margin-bottom: 10px; border-radius: 14px; }
+
+/* =========================================================
+   플랫 아이콘 (이모지 대신 직접 그린 아이콘)
+   선 아이콘 (분홍 가는 선)
+   ========================================================= */
+.ic {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ic-wrap {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--pink-dark);
+}
+
+/* 아이콘과 글자를 한 줄에 나란히 */
+.screen-title,
+.card-title,
+.sheet-label,
+.sub-title,
+.done-label,
+#cal-day-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.done-label { gap: 6px; }
+.screen-title .ic { width: 26px; height: 26px; }
+.sub-title .ic { width: 18px; height: 18px; }
+.done-label .ic { width: 20px; height: 20px; }
+
+/* 하단 메뉴 */
+.nav-icon .ic { width: 22px; height: 22px; color: var(--muted); }
+.nav-btn.active .nav-icon .ic { color: var(--pink-dark); }
+
+/* 설정 버튼 */
+.settings-btn { display: grid; place-items: center; color: var(--text); }
+.settings-btn .ic { width: 18px; height: 18px; }
+
+/* 목표 줄 앞 작은 표시 */
+.goal-mark .ic { width: 18px; height: 18px; }
+
+/* 기록이 없을 때 큰 아이콘 */
+.placeholder .placeholder-icon { margin: 0 auto 8px; }
+.placeholder .placeholder-icon .ic { width: 34px; height: 34px; stroke-width: 1.6; }
+

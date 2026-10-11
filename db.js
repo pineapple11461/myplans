@@ -1116,6 +1116,13 @@ const DB = (function () {
       .then((row) => (row ? row.value : undefined));
   }
 
+  // 설정 하나 저장 (예: 아이콘 모양). 백업에 함께 포함됨
+  function setSetting(key, value) {
+    return run(['settings'], 'readwrite', (tx) => {
+      tx.objectStore('settings').put({ key: key, value: value });
+    });
+  }
+
   // 카테고리 목록 [{ id, name }, ...]
   function getCategories() {
     return getSetting('categories').then((list) => list || DEFAULT_CATEGORIES);
@@ -1141,6 +1148,7 @@ const DB = (function () {
     deleteTask: deleteTask,
     countOccurrences: countOccurrences,
     getSetting: getSetting,
+    setSetting: setSetting,
     getCategories: getCategories,
     FREQUENCIES: FREQUENCIES,
     nthDate: nthDate,

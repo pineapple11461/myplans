@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v25';
+  const APP_VERSION = 'v26';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -110,6 +110,8 @@
     wrap.setAttribute('aria-hidden', 'true');
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('class', 'ic');
+    svg.setAttribute('width', '22');    // styles.css가 없어도 크게 나오지 않게 기본 크기
+    svg.setAttribute('height', '22');
     const use = document.createElementNS(SVG_NS, 'use');
     use.setAttribute('href', '#i-' + name);
     svg.appendChild(use);
