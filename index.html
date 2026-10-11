@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -141,9 +141,30 @@
         </form>
       </div>
 
+      <!-- 주간 습관 -->
+      <div class="card">
+        <h2 class="card-title">🌸 주간 습관</h2>
+        <div class="habit-wrap">
+          <table class="habit-table" id="habit-table"></table>
+        </div>
+        <p class="empty" id="habit-empty">습관을 추가해 보세요</p>
+        <p class="field-hint habit-help" id="habit-help">칸을 누를 때마다 ✓ 실천 → ✕ 안 함 → 빈칸(미기록) 순서로 바뀌어요 · 습관 이름을 누르면 수정·보관</p>
+        <form class="inline-add" id="habit-add-form" autocomplete="off">
+          <input type="text" id="habit-add-input" class="sheet-input"
+                 placeholder="습관 추가" maxlength="50" enterkeyhint="done">
+          <button type="submit" class="btn btn-primary">추가</button>
+        </form>
+        <div class="archived" id="habit-archived" hidden>
+          <button type="button" class="archived-toggle" id="habit-archived-toggle" aria-expanded="false">
+            보관한 습관 <span id="habit-archived-count">0</span>개 <span aria-hidden="true">▾</span>
+          </button>
+          <ul class="archived-list" id="habit-archived-list" hidden></ul>
+        </div>
+      </div>
+
       <div class="card placeholder">
         <span class="placeholder-emoji">🪴</span>
-        습관 · 미션 · 데일리 루틴은 이어서 추가할 예정이에요
+        미션 · 데일리 루틴은 이어서 추가할 예정이에요
       </div>
     </section>
 
@@ -267,6 +288,24 @@
     </div>
   </form>
 
+  <!-- 트래커 항목(습관 등) 수정: 아래에서 올라오는 입력창 -->
+  <form class="sheet" id="tracker-sheet" autocomplete="off" novalidate>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 class="sheet-label" id="tracker-sheet-title">습관 수정</h2>
+    <div class="field">
+      <label for="tracker-name">이름</label>
+      <input type="text" id="tracker-name" class="sheet-input" maxlength="50" enterkeyhint="done">
+    </div>
+    <p class="field-hint" id="tracker-sheet-hint"></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-danger" id="tracker-delete">삭제</button>
+      <button type="button" class="btn btn-soft" id="tracker-archive">보관</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost" id="tracker-cancel">취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
+
   <!-- 잠깐 나타나는 알림 띠 (되돌리기 버튼 포함) -->
   <div class="toast" id="toast" role="status" aria-live="polite">
     <span id="toast-text"></span>
@@ -292,7 +331,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=8" defer></script>
-  <script src="app.js?v=8" defer></script>
+  <script src="db.js?v=9" defer></script>
+  <script src="app.js?v=9" defer></script>
 </body>
 </html>

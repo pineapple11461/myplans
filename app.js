@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v8';
+  const APP_VERSION = 'v9';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -37,6 +37,11 @@
   // 트래커 화면 데이터
   let trackerWeek = DB.weekStartOf(todayStr);   // 보고 있는 주의 월요일
   let weeklyGoals = [];
+  let habits = [];                 // 모든 습관 (보관한 것 포함)
+  let habitLogMap = {};            // 'habitId|date' → 'done' | 'not_done'
+  let habitArchivedOpen = false;   // 보관한 습관 목록 펼침 상태
+  let trackerEditing = null;       // 트래커 수정창 상태: { kind: 'habit', item }
+  let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
   let currentScreen = 'today';
   let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
@@ -517,13 +522,22 @@
   // 트래커 기록은 할 일과 별개. 할 일이 바뀌어도 트래커는 바뀌지 않고, 그 반대도 마찬가지
 
   async function loadTracker() {
-    weeklyGoals = await DB.getWeeklyGoals(trackerWeek);
+    const results = await Promise.all([
+      DB.getWeeklyGoals(trackerWeek),
+      DB.getHabits(),
+      DB.getHabitLogs(trackerWeek)
+    ]);
+    weeklyGoals = results[0];
+    habits = results[1];
+    habitLogMap = {};
+    results[2].forEach((log) => { habitLogMap[log.id] = log.state; });
     renderTracker();
   }
 
   function renderTracker() {
     renderWeekNav();
     renderGoals();
+    renderHabits();
   }
 
   function renderWeekNav() {
@@ -657,6 +671,230 @@
     }
   }
 
+  // ----- 주간 습관 -----
+  const HABIT_NEXT = { none: 'done', done: 'not_done', not_done: 'none' };   // 누를 때마다 바뀌는 순서
+  const HABIT_LABEL = { none: '미기록', done: '실천함', not_done: '실천하지 않음' };
+
+  // 이 주에 표에 보일 습관: 시작한 주 이후이고, 보관한 주 이전
+  function habitsForWeek(week) {
+    return habits.filter((h) =>
+      (h.startWeek || '') <= week && (!h.archivedWeek || week < h.archivedWeek));
+  }
+
+  function renderHabits() {
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => DB.addDays(trackerWeek, i));
+    const visible = habitsForWeek(trackerWeek);
+    const table = $('habit-table');
+    table.innerHTML = '';
+
+    if (visible.length) {
+      // 머리줄: 요일 + 날짜
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      hr.appendChild(document.createElement('th'));
+      days.forEach((d, i) => {
+        const th = document.createElement('th');
+        th.className = 'habit-day' + (d === todayStr ? ' is-today' : '') +
+          (i === 5 ? ' sat' : '') + (i === 6 ? ' sun' : '');
+        const wd = document.createElement('span');
+        wd.textContent = '월화수목금토일'[i];
+        const dn = document.createElement('small');
+        dn.textContent = String(Number(d.slice(8)));
+        th.appendChild(wd);
+        th.appendChild(dn);
+        hr.appendChild(th);
+      });
+      const cth = document.createElement('th');
+      cth.className = 'habit-count-h';
+      cth.textContent = '실천';
+      hr.appendChild(cth);
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      visible.forEach((habit) => tbody.appendChild(habitRow(habit, days)));
+      table.appendChild(tbody);
+    }
+    $('habit-empty').hidden = visible.length > 0;
+    $('habit-help').hidden = visible.length === 0;
+
+    // 보관한 습관 목록
+    const archived = habits.filter((h) => h.archivedWeek);
+    $('habit-archived').hidden = archived.length === 0;
+    $('habit-archived-count').textContent = String(archived.length);
+    $('habit-archived-toggle').setAttribute('aria-expanded', String(habitArchivedOpen));
+    const alist = $('habit-archived-list');
+    alist.hidden = !habitArchivedOpen;
+    alist.innerHTML = '';
+    archived.forEach((habit) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'archived-name';
+      name.textContent = habit.name;
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.className = 'btn btn-soft archived-btn';
+      restore.textContent = '보관 해제';
+      restore.addEventListener('click', () => setHabitArchived(habit, false));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-danger archived-btn';
+      del.textContent = '삭제';
+      del.addEventListener('click', () => deleteHabitFully(habit));
+      li.appendChild(name);
+      li.appendChild(restore);
+      li.appendChild(del);
+      alist.appendChild(li);
+    });
+  }
+
+  function habitRow(habit, days) {
+    const tr = document.createElement('tr');
+
+    const nameCell = document.createElement('th');
+    nameCell.scope = 'row';
+    const nameBtn = document.createElement('button');
+    nameBtn.type = 'button';
+    nameBtn.className = 'habit-name';
+    nameBtn.textContent = habit.name;
+    nameBtn.addEventListener('click', () => openTrackerSheet('habit', habit));
+    nameCell.appendChild(nameBtn);
+    tr.appendChild(nameCell);
+
+    let doneCount = 0;
+    days.forEach((d) => {
+      const state = habitLogMap[habit.id + '|' + d] || 'none';
+      if (state === 'done') doneCount++;
+      const td = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hcell hcell-' + state;
+      btn.textContent = state === 'done' ? '✓' : state === 'not_done' ? '✕' : '';
+      btn.disabled = d > todayStr;                    // 미래 날짜는 기록 불가
+      btn.setAttribute('aria-label',
+        habit.name + ' ' + formatShortDate(d) + ' ' + HABIT_LABEL[state]);
+      btn.addEventListener('click', () => cycleHabit(habit, d));
+      td.appendChild(btn);
+      tr.appendChild(td);
+    });
+
+    const countCell = document.createElement('td');
+    countCell.className = 'habit-count';
+    countCell.textContent = doneCount + '회';
+    tr.appendChild(countCell);
+    return tr;
+  }
+
+  // 칸 누르기: 화면을 먼저 바꾸고, 저장은 순서대로 진행 (실패하면 저장소 상태로 되돌림)
+  function cycleHabit(habit, date) {
+    const key = habit.id + '|' + date;
+    const next = HABIT_NEXT[habitLogMap[key] || 'none'];
+    if (next === 'none') delete habitLogMap[key];
+    else habitLogMap[key] = next;
+    renderHabits();
+
+    saveQueue = saveQueue
+      .then(() => DB.setHabitLog(habit.id, date, next === 'none' ? null : next))
+      .catch((err) => {
+        showError('습관 기록을 저장하지 못했어요.', err);
+        return loadTracker().catch(() => {});
+      });
+  }
+
+  async function addHabit(event) {
+    event.preventDefault();
+    if (busy) return;
+    const input = $('habit-add-input');
+    const name = input.value.trim();
+    if (!name) { shake(input); return; }
+    // 지난 주를 보면서 추가하면 그 주부터, 그 외에는 이번 주부터 표시
+    const thisWeek = DB.weekStartOf(todayStr);
+    const startWeek = trackerWeek < thisWeek ? trackerWeek : thisWeek;
+    busy = true;
+    try {
+      await DB.addHabit(name, startWeek);
+      input.value = '';
+      await loadTracker();
+    } catch (err) {
+      showError('습관을 저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 보관: 이번 주부터 표에서 사라짐. 지난 주의 표와 기록은 그대로
+  async function setHabitArchived(habit, archive) {
+    if (busy) return;
+    busy = true;
+    try {
+      await DB.updateHabit(habit.id, { archivedWeek: archive ? DB.weekStartOf(todayStr) : null });
+      closeSheet();
+      await loadTracker();
+      showToast(archive ? '\'' + habit.name + '\'을(를) 보관했어요' : '보관을 해제했어요');
+    } catch (err) {
+      showError('저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 완전 삭제: 기록 개수를 알리고 확인받음
+  async function deleteHabitFully(habit) {
+    if (busy) return;
+    try {
+      const count = await DB.countHabitLogs(habit.id);
+      let msg = '\'' + habit.name + '\' 습관을 완전히 삭제할까요?';
+      if (count > 0) msg += '\n\n기록 ' + count + '개도 함께 삭제되며 되돌릴 수 없어요.';
+      msg += '\n\n기록을 남기고 표에서만 빼려면 \'보관\'을 사용하세요.';
+      if (!confirm(msg)) return;
+      busy = true;
+      await DB.deleteHabit(habit.id);
+      closeSheet();
+      await loadTracker();
+      showToast('삭제했어요');
+    } catch (err) {
+      showError('삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ----- 트래커 항목 수정창 (습관용, 이후 미션·루틴도 함께 사용) -----
+  function openTrackerSheet(kind, item) {
+    trackerEditing = { kind: kind, item: item };
+    const isArchived = !!item.archivedWeek;
+    $('tracker-sheet-title').textContent = '습관 수정';
+    $('tracker-name').value = item.name;
+    $('tracker-archive').textContent = isArchived ? '보관 해제' : '보관';
+    $('tracker-sheet-hint').textContent = isArchived
+      ? '보관 중인 습관이에요'
+      : '보관하면 이번 주부터 표에서 사라지고, 지난 기록은 그대로 남아요';
+    hideToast();
+    $('sheet-backdrop').classList.add('open');
+    $('tracker-sheet').classList.add('open');
+  }
+
+  async function submitTrackerSheet(event) {
+    event.preventDefault();
+    if (busy || !trackerEditing) return;
+    const input = $('tracker-name');
+    const name = input.value.trim();
+    if (!name) { shake(input); return; }
+    const item = trackerEditing.item;
+    if (name === item.name) { closeSheet(); return; }
+    busy = true;
+    try {
+      // 이름을 바꾸면 지난 주의 표에도 새 이름으로 보임 (기록은 그대로)
+      await DB.updateHabit(item.id, { name: name });
+      closeSheet();
+      await loadTracker();
+    } catch (err) {
+      showError('저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
   function renderFilterChips() {
     const wrap = $('category-filter');
     wrap.innerHTML = '';
@@ -694,12 +932,15 @@
     $('sheet-backdrop').classList.remove('open');
     $('quick-add-sheet').classList.remove('open');
     $('edit-sheet').classList.remove('open');
+    $('tracker-sheet').classList.remove('open');
     editing = null;
+    trackerEditing = null;
   }
 
   function isSheetOpen() {
     return $('quick-add-sheet').classList.contains('open') ||
-      $('edit-sheet').classList.contains('open');
+      $('edit-sheet').classList.contains('open') ||
+      $('tracker-sheet').classList.contains('open');
   }
 
   // '+' 버튼: 오늘 화면은 빠른 추가, 전체 할 일 화면은 상세 추가
@@ -1101,6 +1342,22 @@
     $('week-next').addEventListener('click', () => moveTrackerWeek(1));
     $('week-this').addEventListener('click', () => moveTrackerWeek(0));
     $('goal-add-form').addEventListener('submit', addGoal);
+    $('habit-add-form').addEventListener('submit', addHabit);
+    $('habit-archived-toggle').addEventListener('click', () => {
+      habitArchivedOpen = !habitArchivedOpen;
+      renderHabits();
+    });
+    $('tracker-sheet').addEventListener('submit', submitTrackerSheet);
+    $('tracker-cancel').addEventListener('click', closeSheet);
+    $('tracker-archive').addEventListener('click', () => {
+      if (trackerEditing) {
+        const item = trackerEditing.item;
+        setHabitArchived(item, !item.archivedWeek);
+      }
+    });
+    $('tracker-delete').addEventListener('click', () => {
+      if (trackerEditing) deleteHabitFully(trackerEditing.item);
+    });
 
     // 달력
     $('cal-prev').addEventListener('click', () => moveCalendarMonth(-1));

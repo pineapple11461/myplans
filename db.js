@@ -714,6 +714,72 @@ const DB = (function () {
     });
   }
 
+  // ---------- 트래커: 주간 습관 ----------
+  // 습관: { id, name, startWeek(이 주부터 표에 표시), archivedWeek(이 주부터 숨김, 없으면 null), createdAt, updatedAt }
+  // 기록: { id: 'habitId|date', habitId, date, state: 'done' | 'not_done', updatedAt }
+  //   기록이 없으면 '미기록'
+
+  function getHabits() {
+    return run(['habits'], 'readonly', (tx) => tx.objectStore('habits').getAll())
+      .then((list) => list.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+  }
+
+  function addHabit(name, startWeek) {
+    const now = nowISO();
+    const habit = { id: newId(), name: name, startWeek: startWeek, archivedWeek: null, createdAt: now, updatedAt: now };
+    return run(['habits'], 'readwrite', (tx) => {
+      tx.objectStore('habits').add(habit);
+      return habit;
+    });
+  }
+
+  // changes: { name } 또는 { archivedWeek } (보관: 주 시작일, 보관 해제: null)
+  function updateHabit(id, changes) {
+    return run(['habits'], 'readwrite', (tx) => {
+      const store = tx.objectStore('habits');
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const habit = req.result;
+        if (!habit) { tx.abort(); return; }
+        if ('name' in changes) habit.name = changes.name;
+        if ('archivedWeek' in changes) habit.archivedWeek = changes.archivedWeek;
+        habit.updatedAt = nowISO();
+        store.put(habit);
+      };
+    });
+  }
+
+  // 완전 삭제: 습관 + 모든 기록
+  function deleteHabit(id) {
+    return run(['habits', 'habitLogs'], 'readwrite', (tx) => {
+      tx.objectStore('habits').delete(id);
+      const logs = tx.objectStore('habitLogs');
+      const req = logs.index('habitId').getAllKeys(id);
+      req.onsuccess = () => req.result.forEach((key) => logs.delete(key));
+    });
+  }
+
+  // 기록 개수 (삭제 확인 메시지용): 미기록은 세지 않음
+  function countHabitLogs(id) {
+    return run(['habitLogs'], 'readonly', (tx) => tx.objectStore('habitLogs').index('habitId').count(id));
+  }
+
+  // 한 주(월~일)의 모든 습관 기록
+  function getHabitLogs(weekStart) {
+    const range = IDBKeyRange.bound(weekStart, addDays(weekStart, 6));
+    return run(['habitLogs'], 'readonly', (tx) => tx.objectStore('habitLogs').index('date').getAll(range));
+  }
+
+  // state: 'done' | 'not_done' | null(미기록 → 기록 삭제)
+  function setHabitLog(habitId, date, state) {
+    const id = habitId + '|' + date;
+    return run(['habitLogs'], 'readwrite', (tx) => {
+      const store = tx.objectStore('habitLogs');
+      if (state) store.put({ id: id, habitId: habitId, date: date, state: state, updatedAt: nowISO() });
+      else store.delete(id);
+    });
+  }
+
   // ---------- 설정 ----------
 
   function getSetting(key) {
@@ -754,7 +820,14 @@ const DB = (function () {
     getWeeklyGoals: getWeeklyGoals,
     addWeeklyGoal: addWeeklyGoal,
     updateWeeklyGoal: updateWeeklyGoal,
-    deleteWeeklyGoal: deleteWeeklyGoal
+    deleteWeeklyGoal: deleteWeeklyGoal,
+    getHabits: getHabits,
+    addHabit: addHabit,
+    updateHabit: updateHabit,
+    deleteHabit: deleteHabit,
+    countHabitLogs: countHabitLogs,
+    getHabitLogs: getHabitLogs,
+    setHabitLog: setHabitLog
   };
 
 })();
