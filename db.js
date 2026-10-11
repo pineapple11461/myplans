@@ -624,23 +624,34 @@ const DB = (function () {
 
       function syncScheduled(rule) {
         const dateAt = (k) => nthDate(rule.anchorDate, rule.frequency, k, rule.anchorDay);
-        const start = rule.nextIndex;
-        let k = start;
-        let count = 0;
-        while (count < MAX_CREATE && dateAt(k) <= todayStr) {
-          create(rule, dateAt(k), k);
-          k++;
-          count++;
-        }
-        // 직전 회차가 오늘 이전이면 다음 회차 1개를 미리 만들어 둠
-        if (dateAt(k - 1) <= todayStr) {
-          create(rule, dateAt(k), k);
-          k++;
-        }
-        if (k !== start) {
-          rule.nextIndex = k;
-          ruleStore.put(rule);
-        }
+        const req = occStore.index('taskId').getAll(rule.taskId);
+        req.onsuccess = () => {
+          const mine = req.result.filter((o) => o.ruleId === rule.id);
+          const start = rule.nextIndex;
+          let k = start;
+          let count = 0;
+
+          // 1) 오늘까지 도래한 회차를 모두 만듦 (놓친 회차는 '기한 지남'으로 남음)
+          while (count < MAX_CREATE && dateAt(k) <= todayStr) {
+            create(rule, dateAt(k), k);
+            k++;
+            count++;
+          }
+
+          // 2) 앞으로 할 '미완료' 회차가 하나도 없으면 다음 회차 1개를 만듦
+          //    (다음 회차를 미리 완료하거나 건너뛰면 바로 그다음 회차가 생김)
+          const hasUpcoming = mine.some((o) =>
+            o.status === 'pending' && o.scheduledDate && o.scheduledDate > todayStr);
+          if (!hasUpcoming) {
+            create(rule, dateAt(k), k);
+            k++;
+          }
+
+          if (k !== start) {
+            rule.nextIndex = k;
+            ruleStore.put(rule);
+          }
+        };
       }
 
       function syncCompleted(rule) {
