@@ -5,6 +5,9 @@
 
 (function () {
 
+  // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
+  const APP_VERSION = 'v7';
+
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
 
@@ -30,6 +33,10 @@
   let calMonth = new Date().getMonth() + 1;   // 1~12
   let calSelected = todayStr;                 // 선택한 날짜 'YYYY-MM-DD'
   let calData = { items: [], rules: [], tasksById: {} };
+
+  // 트래커 화면 데이터
+  let trackerWeek = DB.weekStartOf(todayStr);   // 보고 있는 주의 월요일
+  let weeklyGoals = [];
 
   let currentScreen = 'today';
   let editing = null;         // 수정창 상태: { mode: 'new' } 또는 { mode: 'edit', item }
@@ -253,7 +260,7 @@
   // (먼저 반복 규칙에 따라 필요한 회차를 만들어 둠)
   async function reloadAll() {
     await DB.syncRecurrences(todayStr);
-    await Promise.all([loadToday(), loadTasks(), loadCalendar()]);
+    await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker()]);
   }
 
   // 완료 / 완료 취소. 실제 완료일은 오늘 날짜로 자동 기록 (수정창에서 변경 가능)
@@ -504,6 +511,150 @@
     calMonth = t[1];
     calSelected = todayStr;
     loadCalendar().catch((err) => showError('달력을 불러오지 못했어요.', err));
+  }
+
+  // ---------- 트래커 화면 ----------
+  // 트래커 기록은 할 일과 별개. 할 일이 바뀌어도 트래커는 바뀌지 않고, 그 반대도 마찬가지
+
+  async function loadTracker() {
+    weeklyGoals = await DB.getWeeklyGoals(trackerWeek);
+    renderTracker();
+  }
+
+  function renderTracker() {
+    renderWeekNav();
+    renderGoals();
+  }
+
+  function renderWeekNav() {
+    const thisWeek = DB.weekStartOf(todayStr);
+    const a = trackerWeek.split('-').map(Number);
+    const b = thisWeek.split('-').map(Number);
+    const diff = Math.round((new Date(a[0], a[1] - 1, a[2]) - new Date(b[0], b[1] - 1, b[2])) / (7 * 86400000));
+    let title;
+    if (diff === 0) title = '이번 주';
+    else if (diff === -1) title = '지난주';
+    else if (diff === 1) title = '다음 주';
+    else title = diff < 0 ? (-diff) + '주 전' : diff + '주 후';
+    $('week-title').textContent = title;
+    $('week-range').textContent =
+      formatShortDate(trackerWeek) + ' ~ ' + formatShortDate(DB.addDays(trackerWeek, 6));
+    $('week-this').hidden = diff === 0;
+  }
+
+  function moveTrackerWeek(deltaWeeks) {
+    trackerWeek = deltaWeeks === 0
+      ? DB.weekStartOf(todayStr)
+      : DB.addDays(trackerWeek, deltaWeeks * 7);
+    loadTracker().catch((err) => showError('트래커를 불러오지 못했어요.', err));
+  }
+
+  // ----- 주간 목표 -----
+  function renderGoals() {
+    const list = $('goal-list');
+    list.innerHTML = '';
+    weeklyGoals.forEach((goal) => {
+      const li = document.createElement('li');
+      li.className = 'goal-item';
+
+      const mark = document.createElement('span');
+      mark.className = 'goal-mark';
+      mark.textContent = '🎯';
+      mark.setAttribute('aria-hidden', 'true');
+
+      const text = document.createElement('span');
+      text.className = 'goal-text';
+      text.textContent = goal.text;
+      text.setAttribute('role', 'button');
+      text.tabIndex = 0;
+      text.addEventListener('click', () => startEditGoal(li, goal));
+      text.addEventListener('keydown', (e) => { if (e.key === 'Enter') startEditGoal(li, goal); });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'icon-btn';
+      del.setAttribute('aria-label', '목표 삭제');
+      del.textContent = '✕';
+      del.addEventListener('click', () => deleteGoal(goal));
+
+      li.appendChild(mark);
+      li.appendChild(text);
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+    $('goal-empty').hidden = weeklyGoals.length > 0;
+  }
+
+  // 목표 글자를 누르면 그 자리에서 고칠 수 있는 입력칸으로 바뀜
+  function startEditGoal(li, goal) {
+    if (busy) return;
+    const textEl = li.querySelector('.goal-text');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'sheet-input goal-edit';
+    input.value = goal.text;
+    input.maxLength = 100;
+    input.setAttribute('enterkeyhint', 'done');
+    li.replaceChild(input, textEl);
+    input.focus();
+
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const value = input.value.trim();
+      if (!save || !value || value === goal.text) {
+        renderGoals();                 // 변경 없음 또는 취소 (빈 칸이면 원래대로)
+        return;
+      }
+      busy = true;
+      try {
+        await DB.updateWeeklyGoal(goal.id, value);
+        await loadTracker();
+      } catch (err) {
+        showError('목표를 저장하지 못했어요.', err);
+        renderGoals();
+      } finally {
+        busy = false;
+      }
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+
+  async function addGoal(event) {
+    event.preventDefault();
+    if (busy) return;
+    const input = $('goal-add-input');
+    const text = input.value.trim();
+    if (!text) { shake(input); return; }
+    busy = true;
+    try {
+      await DB.addWeeklyGoal(trackerWeek, text);
+      input.value = '';
+      await loadTracker();
+    } catch (err) {
+      showError('목표를 저장하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function deleteGoal(goal) {
+    if (busy) return;
+    if (!confirm('\'' + goal.text + '\' 목표를 삭제할까요?')) return;
+    busy = true;
+    try {
+      await DB.deleteWeeklyGoal(goal.id);
+      await loadTracker();
+    } catch (err) {
+      showError('목표를 삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
   }
 
   function renderFilterChips() {
@@ -930,6 +1081,7 @@
 
   // ---------- 시작 ----------
   async function init() {
+    $('app-version').textContent = APP_VERSION;
     renderDate();
     renderToday();          // 데이터를 불러오기 전에 빈 화면부터 표시
     showScreen('today');
@@ -943,6 +1095,12 @@
     $('sheet-backdrop').addEventListener('click', closeSheet);
     $('quick-add-sheet').addEventListener('submit', submitQuickAdd);
     $('done-toggle').addEventListener('click', toggleDoneList);
+
+    // 트래커
+    $('week-prev').addEventListener('click', () => moveTrackerWeek(-1));
+    $('week-next').addEventListener('click', () => moveTrackerWeek(1));
+    $('week-this').addEventListener('click', () => moveTrackerWeek(0));
+    $('goal-add-form').addEventListener('submit', addGoal);
 
     // 달력
     $('cal-prev').addEventListener('click', () => moveCalendarMonth(-1));

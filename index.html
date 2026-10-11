@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -42,6 +42,9 @@
         </button>
         <ul class="task-list" id="list-done" hidden></ul>
       </div>
+
+      <!-- 지금 실행 중인 앱 버전 (app.js가 채움. 업데이트가 반영됐는지 확인용) -->
+      <p class="app-version" id="app-version"></p>
     </section>
 
     <!-- ========== 2. 전체 할 일 ========== -->
@@ -114,9 +117,33 @@
       <header class="screen-header">
         <h1 class="screen-title">🌱 트래커</h1>
       </header>
+
+      <!-- 주 선택 (월요일~일요일) -->
+      <div class="card week-nav">
+        <button type="button" class="cal-nav" id="week-prev" aria-label="이전 주">‹</button>
+        <div class="week-label">
+          <strong id="week-title"></strong>
+          <span id="week-range"></span>
+        </div>
+        <button type="button" class="cal-nav" id="week-next" aria-label="다음 주">›</button>
+        <button type="button" class="cal-today-btn" id="week-this">이번 주</button>
+      </div>
+
+      <!-- 주간 목표 -->
+      <div class="card">
+        <h2 class="card-title">🎯 주간 목표</h2>
+        <ul class="goal-list" id="goal-list"></ul>
+        <p class="empty" id="goal-empty">이 주의 목표를 적어 보세요</p>
+        <form class="inline-add" id="goal-add-form" autocomplete="off">
+          <input type="text" id="goal-add-input" class="sheet-input"
+                 placeholder="목표 추가" maxlength="100" enterkeyhint="done">
+          <button type="submit" class="btn btn-primary">추가</button>
+        </form>
+      </div>
+
       <div class="card placeholder">
         <span class="placeholder-emoji">🪴</span>
-        7단계에서 만들 예정이에요
+        습관 · 미션 · 데일리 루틴은 이어서 추가할 예정이에요
       </div>
     </section>
 
@@ -265,7 +292,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=6" defer></script>
-  <script src="app.js?v=6" defer></script>
+  <script src="db.js?v=7" defer></script>
+  <script src="app.js?v=7" defer></script>
 </body>
 </html>

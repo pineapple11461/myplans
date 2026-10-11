@@ -82,6 +82,19 @@ const DB = (function () {
     return toDateStr(new Date(y, m - 1, day));
   }
 
+  // 'YYYY-MM-DD'에 n일 더하기 (음수면 빼기)
+  function addDays(dateStr, n) {
+    const a = parseDate(dateStr);
+    return toDateStr(new Date(a.y, a.m - 1, a.d + n));
+  }
+
+  // 그 날짜가 속한 주의 월요일 (주간 기준: 월요일~일요일)
+  function weekStartOf(dateStr) {
+    const a = parseDate(dateStr);
+    const dow = new Date(a.y, a.m - 1, a.d).getDay();   // 0=일, 1=월 … 6=토
+    return addDays(dateStr, -((dow + 6) % 7));
+  }
+
   // 완료일 기준 반복: 완료(또는 건너뛴) 날에서 한 주기 뒤
   function nextFromBase(frequency, baseDate) {
     return nthDate(baseDate, frequency, 1, parseDate(baseDate).d);
@@ -651,6 +664,45 @@ const DB = (function () {
     });
   }
 
+  // ---------- 트래커: 주간 목표 ----------
+  // 기록: { id, weekStart(그 주 월요일), text, createdAt, updatedAt }
+  // 할 일 데이터와 완전히 별개로 저장됨
+
+  function getWeeklyGoals(weekStart) {
+    return run(['weeklyGoals'], 'readonly',
+      (tx) => tx.objectStore('weeklyGoals').index('weekStart').getAll(weekStart))
+      .then((list) => list.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+  }
+
+  function addWeeklyGoal(weekStart, text) {
+    const now = nowISO();
+    const goal = { id: newId(), weekStart: weekStart, text: text, createdAt: now, updatedAt: now };
+    return run(['weeklyGoals'], 'readwrite', (tx) => {
+      tx.objectStore('weeklyGoals').add(goal);
+      return goal;
+    });
+  }
+
+  function updateWeeklyGoal(id, text) {
+    return run(['weeklyGoals'], 'readwrite', (tx) => {
+      const store = tx.objectStore('weeklyGoals');
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const goal = req.result;
+        if (!goal) { tx.abort(); return; }
+        goal.text = text;
+        goal.updatedAt = nowISO();
+        store.put(goal);
+      };
+    });
+  }
+
+  function deleteWeeklyGoal(id) {
+    return run(['weeklyGoals'], 'readwrite', (tx) => {
+      tx.objectStore('weeklyGoals').delete(id);
+    });
+  }
+
   // ---------- 설정 ----------
 
   function getSetting(key) {
@@ -685,7 +737,13 @@ const DB = (function () {
     getCategories: getCategories,
     FREQUENCIES: FREQUENCIES,
     nthDate: nthDate,
-    isDateCorrection: isDateCorrection
+    isDateCorrection: isDateCorrection,
+    addDays: addDays,
+    weekStartOf: weekStartOf,
+    getWeeklyGoals: getWeeklyGoals,
+    addWeeklyGoal: addWeeklyGoal,
+    updateWeeklyGoal: updateWeeklyGoal,
+    deleteWeeklyGoal: deleteWeeklyGoal
   };
 
 })();

@@ -618,3 +618,68 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
 .badge-done    { background: var(--mint-soft); color: #4E9A7E; }
 .badge-overdue { background: var(--pink-soft); color: var(--pink-dark); }
 .badge-proj    { background: none; border: 1px dashed var(--pink); color: var(--pink-dark); }
+
+/* =========================================
+   7단계 추가: 트래커 (주 선택, 주간 목표), 버전 표시
+   ========================================= */
+
+.app-version {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+/* 주 선택 */
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+}
+.week-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
+}
+.week-label strong { font-size: 1.05rem; }
+.week-label span { font-size: 0.8rem; color: var(--muted); }
+
+/* 주간 목표 */
+.goal-list { list-style: none; }
+.goal-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--line);
+}
+.goal-item:first-child { border-top: none; }
+.goal-mark { flex: none; font-size: 1rem; }
+.goal-text { flex: 1; word-break: break-word; cursor: pointer; }
+.goal-edit { flex: 1; padding: 8px 10px; }
+
+.icon-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.icon-btn:active { background: var(--line); }
+
+/* 카드 안에서 바로 추가하는 입력줄 */
+.inline-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.inline-add .sheet-input { flex: 1; min-width: 0; padding: 10px 12px; }
+.inline-add .btn { flex: none; padding: 10px 16px; }
