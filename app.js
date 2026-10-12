@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v35';
+  const APP_VERSION = 'v36';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'review'];
@@ -2601,6 +2601,7 @@
   function pikDayLabel(n) {
     if (n <= 0) return '오늘';
     if (n === 1) return '내일';
+    if (n === 2) return '모레';
     const d = DB.addDays(todayStr, n);
     return parseInt(d.slice(5, 7), 10) + '/' + parseInt(d.slice(8, 10), 10);
   }
@@ -2613,11 +2614,13 @@
   }
 
   // 버섯이 아닌 미션의 색: a = 할 수 있는 첫날, b = 늦어도 해야 하는 날 (0 = 오늘)
+  //   분홍 = 오늘 꼭, 파랑 = 내일 꼭(내일 하루뿐),
+  //   흰색 = 이틀 이상 중 아무 날이나 (오늘이나 내일부터 시작), 테두리만 = 모레 이후에 시작
   function pikColor(a, b) {
     if (b <= 0) return ['c-n', '오늘 꼭'];
     if (a <= 0) return ['c-mid', b === 1 ? '오늘·내일' : '오늘~' + pikDayLabel(b)];
     if (a === 1 && b === 1) return ['c-n1', '내일 꼭'];
-    if (a === 1) return ['c-n1', '내일부터'];
+    if (a === 1) return ['c-mid', (b === 2 ? '내일·모레' : '내일~' + pikDayLabel(b))];
     return ['c-later', pikDayLabel(a) + '부터'];
   }
 
