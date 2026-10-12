@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v26';
+  const APP_VERSION = 'v29';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -43,15 +43,11 @@
   let missions = [];               // 모든 미션 (보관한 것 포함)
   let missionWeek = { targets: {}, logs: [] };   // 보고 있는 주의 미션 목표 고침·실천 기록
   let missionArchivedOpen = false;
-  let routines = [];               // 모든 루틴 (보관한 것 포함)
-  let routineDone = {};            // 'routineId|date' → true (실천한 날만)
-  let routineDay = todayStr;       // 루틴 카드에서 선택한 날짜
-  let routineArchivedOpen = false;
   let trackerEditing = null;       // 트래커 수정창 상태: { kind: 'habit', item }
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
   // 리뷰 화면
-  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions' | 'routines'
+  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions'
   let reviewYear = new Date().getFullYear();
   let reviewMonth = new Date().getMonth() + 1;     // 1~12
   let reviewLoadId = 0;                            // 빠르게 탭·달을 바꿀 때 늦게 온 결과 무시
@@ -224,6 +220,15 @@
     title.className = 'task-title';
     title.textContent = item.task.title;   // textContent 사용: 입력한 글자가 HTML로 해석되지 않음
     main.appendChild(title);
+
+    // 체크리스트가 있으면 '2/5'처럼 이 회차의 진행 표시
+    const ck = checklistProgress(item.task, occ);
+    if (ck) {
+      const badge = document.createElement('span');
+      badge.className = 'ck-badge' + (ck.done === ck.total ? ' is-full' : '');
+      badge.textContent = '☑ ' + ck.done + '/' + ck.total;
+      main.appendChild(badge);
+    }
     body.appendChild(main);
 
     if (showMeta) {
@@ -237,11 +242,14 @@
       };
 
       if (occ.scheduledDate) {
-        const overdue = occ.scheduledDate < todayStr;
+        const overdue = occ.status === 'pending' && occ.scheduledDate < todayStr;
         const today = occ.scheduledDate === todayStr;
         add((today ? '오늘' : formatShortDate(occ.scheduledDate)) +
             (occ.time ? ' ' + occ.time : ''), overdue ? 'meta-overdue' : '');
       }
+      // 검색 결과에는 완료·건너뛴 회차도 나오므로 상태 표시
+      if (occ.status === 'done') add((occ.completedDate ? formatMD(occ.completedDate) + ' ' : '') + '완료', 'meta-done');
+      if (occ.status === 'skipped') add('건너뜀', 'meta-chip');
       // 원래 예정일은 목록에 표시하지 않음 (수정창과 리뷰 화면에서만 표시)
       if (item.rule && DB.FREQUENCIES[item.rule.frequency]) {
         add('🔁 ' + DB.FREQUENCIES[item.rule.frequency].label, 'meta-repeat');
@@ -298,6 +306,85 @@
   async function loadTasks() {
     pendingItems = await DB.getPendingItems();
     renderTasks();
+    if (searchQuery) await runSearch();
+  }
+
+  // 체크리스트 진행: { done, total } 또는 null (항목이 없으면)
+  function checklistProgress(task, occ) {
+    const items = task.checklist || [];
+    if (!items.length) return null;
+    const checked = new Set(occ.checked || []);
+    return { done: items.filter((i) => checked.has(i.id)).length, total: items.length };
+  }
+
+  // ---------- 할 일 검색 ----------
+  // 이름·메모·체크리스트 항목·카테고리에서 찾고, 미완료·완료·건너뜀을 모두 보여 줌
+  let searchQuery = '';
+  let searchTimer = null;
+  let searchLoadId = 0;
+
+  function onSearchInput() {
+    searchQuery = $('task-search').value.trim();
+    $('task-search-clear').hidden = !$('task-search').value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      runSearch().catch((err) => showError('검색하지 못했어요.', err));
+    }, 150);
+  }
+
+  function clearSearch() {
+    $('task-search').value = '';
+    onSearchInput();
+    $('task-search').focus();
+  }
+
+  function searchText(item) {
+    const t = item.task;
+    return [
+      t.title,
+      t.memo || '',
+      (t.checklist || []).map((c) => c.text).join(' '),
+      categoryName(t.categoryId)
+    ].join(' ').toLowerCase();
+  }
+
+  async function runSearch() {
+    const section = document.querySelector('section[data-screen="tasks"]');
+    const q = searchQuery.toLowerCase();
+    if (!q) {
+      section.classList.remove('is-searching');
+      $('search-card').hidden = true;
+      return;
+    }
+    const myId = ++searchLoadId;
+    const all = await DB.getAllItems();
+    if (myId !== searchLoadId) return;          // 더 새 검색이 시작됐으면 무시
+
+    const found = all.filter((it) => searchText(it).includes(q));
+    // 순서: 기한 지난 일 → 예정된 일 → 날짜 없는 일 → 완료·건너뜀(최근 것부터)
+    const rank = (it) => {
+      const o = it.occurrence;
+      if (o.status !== 'pending') return 3;
+      if (!o.scheduledDate) return 2;
+      return o.scheduledDate < todayStr ? 0 : 1;
+    };
+    const doneDate = (o) => o.completedDate || o.skippedDate || o.scheduledDate || '';
+    found.sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 3) return doneDate(b.occurrence).localeCompare(doneDate(a.occurrence));
+      if (ra === 2) return byCreated(a, b);
+      return byDateTime(a, b);
+    });
+
+    const LIMIT = 100;
+    fillList($('search-list'), found.slice(0, LIMIT).map((it) => createTaskItem(it, true)));
+    $('search-count').textContent = found.length
+      ? (found.length > LIMIT ? LIMIT + '+' : String(found.length)) : '';
+    $('search-empty').hidden = found.length > 0;
+    $('search-card').hidden = false;
+    section.classList.add('is-searching');
   }
 
   // 데이터가 바뀐 뒤 두 화면을 모두 다시 그림
@@ -570,9 +657,7 @@
       DB.getHabits(),
       DB.getHabitLogs(trackerWeek),
       DB.getMissions(),
-      DB.getMissionWeek(trackerWeek),
-      DB.getRoutines(),
-      DB.getRoutineLogs(trackerWeek)
+      DB.getMissionWeek(trackerWeek)
     ]);
     weeklyGoals = results[0];
     habits = results[1];
@@ -580,9 +665,6 @@
     results[2].forEach((log) => { habitLogMap[log.id] = log.state; });
     missions = results[3];
     missionWeek = results[4];
-    routines = results[5];
-    routineDone = {};
-    results[6].forEach((log) => { if (log.done) routineDone[log.id] = true; });
     renderTracker();
   }
 
@@ -591,7 +673,6 @@
     renderGoals();
     renderHabits();
     renderMissions();
-    renderRoutines();
   }
 
   function renderWeekNav() {
@@ -614,8 +695,6 @@
     trackerWeek = deltaWeeks === 0
       ? DB.weekStartOf(todayStr)
       : DB.addDays(trackerWeek, deltaWeeks * 7);
-    // 루틴 날짜: 이번 주면 오늘, 다른 주면 그 주 월요일
-    routineDay = trackerWeek === DB.weekStartOf(todayStr) ? todayStr : trackerWeek;
     loadTracker().catch((err) => showError('트래커를 불러오지 못했어요.', err));
   }
 
@@ -1033,167 +1112,14 @@
     }
   }
 
-  // ----- 데일리 루틴 -----
-
-  // 그날 보일 루틴: 시작한 날 이후이고, 보관한 날 이전
-  function routinesForDay(date) {
-    return routines.filter((r) =>
-      (r.startDate || '') <= date && (!r.archivedDate || date < r.archivedDate));
-  }
-
-  function renderRoutines() {
-    // 날짜 버튼 (월~일). 그날 루틴을 모두 하면 꽉 찬 표시, 일부면 반만
-    const chips = $('routine-days');
-    chips.innerHTML = '';
-    for (let i = 0; i < 7; i++) {
-      const d = DB.addDays(trackerWeek, i);
-      const list = routinesForDay(d);
-      const done = list.filter((r) => routineDone[r.id + '|' + d]).length;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'day-chip' +
-        (d === routineDay ? ' selected' : '') +
-        (d === todayStr ? ' is-today' : '') +
-        (list.length && done === list.length ? ' all-done' : done > 0 ? ' some-done' : '');
-      btn.disabled = d > todayStr;
-      const wd = document.createElement('span');
-      wd.textContent = '월화수목금토일'[i];
-      const dn = document.createElement('small');
-      dn.textContent = String(Number(d.slice(8)));
-      btn.appendChild(wd);
-      btn.appendChild(dn);
-      btn.setAttribute('aria-label', formatShortDate(d) + (list.length ? ', ' + done + '/' + list.length : ''));
-      btn.setAttribute('aria-pressed', String(d === routineDay));
-      btn.addEventListener('click', () => {
-        routineDay = d;
-        renderRoutines();
-      });
-      chips.appendChild(btn);
-    }
-
-    // 선택한 날의 체크리스트
-    const day = routineDay;
-    const visible = routinesForDay(day);
-    const list = $('routine-list');
-    list.innerHTML = '';
-    let doneCount = 0;
-    visible.forEach((r) => {
-      const isDone = !!routineDone[r.id + '|' + day];
-      if (isDone) doneCount++;
-      const li = document.createElement('li');
-      li.className = 'task-item' + (isDone ? ' is-done' : '');
-
-      const check = document.createElement('button');
-      check.type = 'button';
-      check.className = 'check';
-      check.textContent = isDone ? '✓' : '';
-      check.disabled = day > todayStr;
-      check.setAttribute('aria-label', r.name + (isDone ? ' 실천 취소' : ' 실천'));
-      check.addEventListener('click', () => toggleRoutine(r, day));
-
-      const name = document.createElement('span');
-      name.className = 'task-title routine-name';
-      name.textContent = r.name;
-      name.setAttribute('role', 'button');
-      name.tabIndex = 0;
-      name.addEventListener('click', () => openTrackerSheet('routine', r));
-
-      li.appendChild(check);
-      li.appendChild(name);
-      list.appendChild(li);
-    });
-    $('routine-empty').hidden = visible.length > 0;
-    $('routine-progress').textContent = visible.length
-      ? (day === todayStr ? '오늘 ' : formatMD(day) + ' ') + doneCount + '/' + visible.length
-      : '';
-
-    renderArchivedSection('routine', routines.filter((r) => r.archivedDate), routineArchivedOpen,
-      (r) => setTrackerArchived('routine', r, false),
-      (r) => deleteTrackerFully('routine', r));
-  }
-
-  // 체크: 화면을 먼저 바꾸고 순서대로 저장 (실패하면 저장소 상태로 되돌림)
-  function toggleRoutine(routine, date) {
-    const key = routine.id + '|' + date;
-    const next = !routineDone[key];
-    if (next) routineDone[key] = true;
-    else delete routineDone[key];
-    renderRoutines();
-
-    saveQueue = saveQueue
-      .then(() => DB.setRoutineLog(routine.id, date, next))
-      .catch((err) => {
-        showError('루틴 기록을 저장하지 못했어요.', err);
-        return loadTracker().catch(() => {});
-      });
-  }
-
-  async function addRoutine(event) {
-    event.preventDefault();
-    if (busy) return;
-    const input = $('routine-add-input');
-    const name = input.value.trim();
-    if (!name) { shake(input); return; }
-    // 지난 날짜를 보면서 추가하면 그날부터, 그 외에는 오늘부터 표시
-    const startDate = routineDay < todayStr ? routineDay : todayStr;
-    busy = true;
-    try {
-      await DB.addRoutine(name, startDate);
-      input.value = '';
-      await loadTracker();
-    } catch (err) {
-      showError('루틴을 저장하지 못했어요.', err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  // 보관: 오늘부터 목록에서 사라짐. 어제까지의 기록은 그대로
-  async function setRoutineArchived(routine, archive) {
-    if (busy) return;
-    busy = true;
-    try {
-      await DB.updateRoutine(routine.id, { archivedDate: archive ? todayStr : null });
-      closeSheet();
-      await loadTracker();
-      showToast(archive ? '\'' + routine.name + '\'을(를) 보관했어요' : '보관을 해제했어요');
-    } catch (err) {
-      showError('저장하지 못했어요.', err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function deleteRoutineFully(routine) {
-    if (busy) return;
-    try {
-      const count = await DB.countRoutineLogs(routine.id);
-      let msg = '\'' + routine.name + '\' 루틴을 완전히 삭제할까요?';
-      if (count > 0) msg += '\n\n실천 기록 ' + count + '개도 함께 삭제되며 되돌릴 수 없어요.';
-      msg += '\n\n기록을 남기고 목록에서만 빼려면 \'보관\'을 사용하세요.';
-      if (!confirm(msg)) return;
-      busy = true;
-      await DB.deleteRoutine(routine.id);
-      closeSheet();
-      await loadTracker();
-      showToast('삭제했어요');
-    } catch (err) {
-      showError('삭제하지 못했어요.', err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  // ----- 보관 / 완전 삭제 (습관·미션·루틴 공통으로 호출) -----
+  // ----- 보관 / 완전 삭제 (습관·미션 공통으로 호출) -----
   function setTrackerArchived(kind, item, archive) {
     if (kind === 'habit') return setHabitArchived(item, archive);
-    if (kind === 'routine') return setRoutineArchived(item, archive);
     return setMissionArchived(item, archive);
   }
   function deleteTrackerFully(kind, item) {
     if (kind === 'goal') return deleteGoal(item);
     if (kind === 'habit') return deleteHabitFully(item);
-    if (kind === 'routine') return deleteRoutineFully(item);
     return deleteMissionFully(item);
   }
 
@@ -1242,7 +1168,7 @@
     trackerEditing = { kind: kind, item: item };
     const isGoal = kind === 'goal';
     const isArchived = isTrackerArchived(item);
-    const label = { goal: '목표', habit: '습관', mission: '미션', routine: '루틴' }[kind];
+    const label = { goal: '목표', habit: '습관', mission: '미션' }[kind];
     $('tracker-sheet-title').textContent = label + ' 수정';
     $('tracker-name').value = isGoal ? item.text : item.name;
     $('tracker-name').maxLength = isGoal ? 100 : 50;
@@ -1253,9 +1179,7 @@
       ? ''
       : isArchived
         ? '보관 중인 ' + label + '이에요'
-        : kind === 'routine'
-          ? '보관하면 오늘부터 목록에서 사라지고, 어제까지의 기록은 그대로 남아요'
-          : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
+        : '보관하면 이번 주부터 목록에서 사라지고, 지난 기록은 그대로 남아요';
 
     // 미션만: 목표 횟수
     const isMission = kind === 'mission';
@@ -1298,8 +1222,6 @@
         await DB.updateWeeklyGoal(item.id, name);
       } else if (kind === 'habit') {
         await DB.updateHabit(item.id, { name: name });
-      } else if (kind === 'routine') {
-        await DB.updateRoutine(item.id, { name: name });
       } else {
         if (name !== item.name) await DB.updateMission(item.id, { name: name });
         if (newTarget !== null) {
@@ -1324,7 +1246,7 @@
   // 기록 종류별로 나눠서 보여 줌. 할 일 기록은 수정창에서, 트래커 기록은 트래커 화면에서 고침
   // (고치는 곳을 한 군데로 두어 다른 종류의 기록에 영향이 가지 않게 함)
 
-  const REVIEW_NAMES = { tasks: '할 일', goals: '주간 목표', habits: '습관', missions: '미션', routines: '루틴' };
+  const REVIEW_NAMES = { tasks: '할 일', goals: '주간 목표', habits: '습관', missions: '미션' };
 
   function monthRangeOf(y, m) {
     const last = new Date(y, m, 0).getDate();
@@ -1392,8 +1314,7 @@
   function loadWeekRecords(week) {
     if (reviewTab === 'goals') return DB.getWeeklyGoals(week);
     if (reviewTab === 'habits') return DB.getHabitLogs(week);
-    if (reviewTab === 'missions') return DB.getMissionWeek(week);
-    return DB.getRoutineLogs(week);
+    return DB.getMissionWeek(week);
   }
 
   function emptyCard(text) {
@@ -1565,38 +1486,12 @@
       return list;
     }
 
-    // routines
-    const doneSet = {};
-    records.forEach((l) => { if (l.done) doneSet[l.id] = true; });
-    const shown = routines.filter((r) =>
-      days.some((d) => d <= todayStr && routinesForDay(d).includes(r)) ||
-      records.some((l) => l.routineId === r.id));
-    if (!shown.length) return null;
-    shown.forEach((r) => {
-      const li = el('li', 'review-line');
-      li.appendChild(el('span', 'review-line-name', r.name));
-      const cells = el('span', 'mini-cells');
-      let done = 0;
-      let possible = 0;
-      days.forEach((d) => {
-        const active = d <= todayStr && routinesForDay(d).includes(r);
-        const isDone = !!doneSet[r.id + '|' + d];
-        if (active) possible++;
-        if (isDone) done++;
-        cells.appendChild(el('i', 'mini ' +
-          (isDone ? 'mini-done' : active ? 'mini-none' : 'mini-future'), isDone ? '✓' : ''));
-      });
-      li.appendChild(cells);
-      li.appendChild(el('span', 'review-line-count', done + '/' + possible + '일'));
-      list.appendChild(li);
-    });
-    return list;
+    return null;
   }
 
   // 리뷰에서 '이 주 고치기' → 트래커의 그 주로 이동
   function goTrackerWeek(week) {
     trackerWeek = week;
-    routineDay = week === DB.weekStartOf(todayStr) ? todayStr : week;
     showScreen('tracker');
     loadTracker().catch((err) => showError('트래커를 불러오지 못했어요.', err));
   }
@@ -1671,9 +1566,143 @@
       pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   }
 
+  // ---------- 카테고리 관리 (설정 창) ----------
+  // 줄마다: 이름 칸(고치고 다른 곳을 누르거나 엔터 → 저장) · ↑ · ↓ · 삭제
+
+  function renderCategoryManager() {
+    const list = $('cat-list');
+    list.innerHTML = '';
+    categories.forEach((cat, i) => {
+      const li = el('li', 'cat-row');
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'sheet-input cat-name';
+      input.value = cat.name;
+      input.maxLength = 20;
+      input.setAttribute('enterkeyhint', 'done');
+      input.setAttribute('aria-label', '카테고리 이름');
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = cat.name; input.blur(); }
+      });
+      input.addEventListener('blur', () => renameCategory(cat, input));
+
+      const up = el('button', 'cat-btn', '↑');
+      up.type = 'button';
+      up.disabled = i === 0;
+      up.setAttribute('aria-label', cat.name + ' 위로');
+      up.addEventListener('click', () => moveCategory(i, -1));
+
+      const down = el('button', 'cat-btn', '↓');
+      down.type = 'button';
+      down.disabled = i === categories.length - 1;
+      down.setAttribute('aria-label', cat.name + ' 아래로');
+      down.addEventListener('click', () => moveCategory(i, 1));
+
+      const del = el('button', 'btn btn-danger cat-del', '삭제');
+      del.type = 'button';
+      del.addEventListener('click', () => removeCategory(cat));
+
+      li.appendChild(input);
+      li.appendChild(up);
+      li.appendChild(down);
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+  }
+
+  // 카테고리를 바꾼 뒤: 필터 버튼과 할 일 목록을 새 이름으로 다시 그림
+  async function afterCategoryChange() {
+    categories = await DB.getCategories();
+    if (tasksFilter !== 'all' && !categories.some((c) => c.id === tasksFilter)) tasksFilter = 'all';
+    renderCategoryManager();
+    renderFilterChips();
+    await reloadAll();
+  }
+
+  async function saveCategoryList(list, okMessage) {
+    if (busy) return;
+    busy = true;
+    try {
+      await DB.saveCategories(list);
+      await afterCategoryChange();
+      if (okMessage) showToast(okMessage);
+    } catch (err) {
+      showError('카테고리를 저장하지 못했어요.', err);
+      renderCategoryManager();
+    } finally {
+      busy = false;
+    }
+  }
+
+  function isDuplicateName(name, exceptId) {
+    return categories.some((c) => c.id !== exceptId && c.name === name);
+  }
+
+  function renameCategory(cat, input) {
+    const name = input.value.trim();
+    if (name === cat.name) return;
+    if (!name) {                      // 빈칸이면 원래 이름으로 (삭제는 '삭제' 버튼으로만)
+      input.value = cat.name;
+      return;
+    }
+    if (isDuplicateName(name, cat.id)) {
+      input.value = cat.name;
+      showToast('같은 이름의 카테고리가 이미 있어요');
+      return;
+    }
+    const list = categories.map((c) => (c.id === cat.id ? { id: c.id, name: name } : c));
+    saveCategoryList(list, '이름을 바꿨어요');
+  }
+
+  function moveCategory(index, delta) {
+    const to = index + delta;
+    if (to < 0 || to >= categories.length) return;
+    const list = categories.slice();
+    const moved = list.splice(index, 1)[0];
+    list.splice(to, 0, moved);
+    saveCategoryList(list);
+  }
+
+  async function addCategory(event) {
+    event.preventDefault();
+    const input = $('cat-add-input');
+    const name = input.value.trim();
+    if (!name) { shake(input); return; }
+    if (isDuplicateName(name, null)) {
+      shake(input);
+      showToast('같은 이름의 카테고리가 이미 있어요');
+      return;
+    }
+    const list = categories.concat([{ id: DB.newCategoryId(), name: name }]);
+    await saveCategoryList(list, '카테고리를 추가했어요');
+    input.value = '';
+  }
+
+  async function removeCategory(cat) {
+    if (busy) return;
+    try {
+      const count = await DB.countTasksInCategory(cat.id);
+      let msg = '\'' + cat.name + '\' 카테고리를 삭제할까요?';
+      if (count > 0) msg += '\n\n이 카테고리의 할 일 ' + count + '개는 \'없음\'으로 바뀌어요. 할 일과 기록은 그대로 남아요.';
+      if (!confirm(msg)) return;
+      busy = true;
+      await DB.deleteCategory(cat.id);
+      await afterCategoryChange();
+      showToast('삭제했어요');
+    } catch (err) {
+      showError('카테고리를 삭제하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function openDataSheet() {
     closeSheet();
     hideRestorePanel();
+    renderCategoryManager();
+    $('cat-add-input').value = '';
     try {
       const last = await DB.getSetting('lastBackupAt');
       $('data-last-backup').textContent = last
@@ -1842,7 +1871,8 @@
   function closeSheet() {
     const input = $('quick-add-input');
     input.value = '';
-    if (document.activeElement) document.activeElement.blur();
+    if (document.activeElement) document.activeElement.blur();   // 고치던 칸이 있으면 여기서 저장됨
+    const checklistChanged = !!(editing && editing.checklistDirty);
     $('sheet-backdrop').classList.remove('open');
     $('quick-add-sheet').classList.remove('open');
     $('edit-sheet').classList.remove('open');
@@ -1851,6 +1881,10 @@
     editing = null;
     trackerEditing = null;
     pendingRestore = null;
+    // 체크리스트를 바꿨으면 저장이 끝난 뒤 목록의 '2/5' 표시를 새로 그림
+    if (checklistChanged) {
+      saveQueue = saveQueue.then(() => reloadAll()).catch(() => {});
+    }
   }
 
   function isSheetOpen() {
@@ -2017,6 +2051,110 @@
     $('edit-sheet').scrollTop = 0;
   }
 
+  // ---------- 수정창의 체크리스트 ----------
+  // 새 할 일: 항목을 모아 두었다가 '저장'할 때 함께 저장
+  // 기존 할 일: 항목 추가·고치기·삭제와 체크는 누르는 즉시 저장 (취소해도 남음)
+
+  function renderChecklist() {
+    if (!editing) return;
+    const isEdit = editing.mode === 'edit';
+    const items = editing.checklist;
+    const checked = editing.checked;
+    const list = $('checklist-list');
+    list.innerHTML = '';
+
+    items.forEach((it) => {
+      const isOn = checked.has(it.id);
+      const li = el('li', 'checklist-item' + (isOn ? ' is-done' : ''));
+
+      if (isEdit) {
+        const btn = el('button', 'check', isOn ? '✓' : '');
+        btn.type = 'button';
+        btn.setAttribute('aria-label', it.text + (isOn ? ' 체크 해제' : ' 체크'));
+        btn.addEventListener('click', () => toggleChecklistItem(it));
+        li.appendChild(btn);
+      }
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'sheet-input checklist-text';
+      input.value = it.text;
+      input.maxLength = 60;
+      input.setAttribute('enterkeyhint', 'done');
+      input.setAttribute('aria-label', '체크리스트 항목');
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }   // 엔터로 창 전체가 저장되지 않게
+        if (e.key === 'Escape') { input.value = it.text; input.blur(); }
+      });
+      input.addEventListener('blur', () => {
+        const text = input.value.trim();
+        if (!text) { input.value = it.text; return; }      // 빈칸이면 원래대로 (삭제는 ✕)
+        if (text === it.text) return;
+        it.text = text;
+        saveChecklistItems();
+      });
+      li.appendChild(input);
+
+      const del = el('button', 'icon-btn', '✕');
+      del.type = 'button';
+      del.setAttribute('aria-label', it.text + ' 삭제');
+      del.addEventListener('click', () => {
+        editing.checklist = editing.checklist.filter((x) => x.id !== it.id);
+        editing.checked.delete(it.id);
+        renderChecklist();
+        saveChecklistItems();
+      });
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+
+    const done = items.filter((i) => checked.has(i.id)).length;
+    $('checklist-progress').textContent = items.length && isEdit ? done + '/' + items.length : '';
+
+    let hint = '';
+    if (!isEdit && items.length) hint = '체크는 저장한 뒤에 할 수 있어요';
+    else if (isEdit && editing.item.occurrence.ruleId) {
+      hint = '항목은 모든 회차에 같고, 체크는 이번 회차에만 표시돼요';
+    }
+    $('checklist-hint').textContent = hint;
+  }
+
+  function addChecklistItem() {
+    if (!editing) return;
+    const input = $('checklist-add-input');
+    const text = input.value.trim();
+    if (!text) { shake(input); return; }
+    editing.checklist.push({ id: DB.newChecklistItemId(), text: text });
+    input.value = '';
+    renderChecklist();
+    saveChecklistItems();
+    input.focus();
+  }
+
+  // 기존 할 일이면 항목 목록을 바로 저장 (순서대로)
+  function saveChecklistItems() {
+    if (!editing || editing.mode !== 'edit') return;
+    const taskId = editing.item.task.id;
+    const items = editing.checklist.map((i) => ({ id: i.id, text: i.text }));
+    editing.checklistDirty = true;
+    saveQueue = saveQueue
+      .then(() => DB.setChecklist(taskId, items))
+      .catch((err) => showError('체크리스트를 저장하지 못했어요.', err));
+  }
+
+  function toggleChecklistItem(it) {
+    if (!editing || editing.mode !== 'edit') return;
+    const on = !editing.checked.has(it.id);
+    if (on) editing.checked.add(it.id);
+    else editing.checked.delete(it.id);
+    editing.checklistDirty = true;
+    renderChecklist();
+    const occId = editing.item.occurrence.id;
+    saveQueue = saveQueue
+      .then(() => DB.setChecklistChecked(occId, it.id, on))
+      .catch((err) => showError('체크를 저장하지 못했어요.', err));
+  }
+
   // 새 할 일 (전체 할 일 화면의 '+')
   function openNew() {
     editing = { mode: 'new' };
@@ -2031,6 +2169,10 @@
     $('edit-time-apply').checked = false;
     $('edit-completed-field').hidden = true;
     $('edit-delete').hidden = true;
+    editing.checklist = [];
+    editing.checked = new Set();
+    $('checklist-add-input').value = '';
+    renderChecklist();
     updateDateFields();
     openEditSheet();
     setTimeout(() => $('edit-title').focus(), 60);
@@ -2064,6 +2206,10 @@
       $('edit-completed').max = todayStr;
 
       $('edit-delete').hidden = false;
+      editing.checklist = (item.task.checklist || []).map((i) => ({ id: i.id, text: i.text }));
+      editing.checked = new Set(occ.checked || []);
+      $('checklist-add-input').value = '';
+      renderChecklist();
       updateDateFields();
       openEditSheet();
     } catch (err) {
@@ -2108,6 +2254,12 @@
     }
     fields.repeat = repeat;
     fields.repeatChanged = repeatChanged;
+    if (editing.mode === 'new') {
+      // 아직 '추가'를 누르지 않고 칸에 남은 항목도 함께 넣음
+      const pending = $('checklist-add-input').value.trim();
+      if (pending) editing.checklist.push({ id: DB.newChecklistItemId(), text: pending });
+      fields.checklist = editing.checklist.map((i) => ({ id: i.id, text: i.text }));
+    }
     fields.applyTimeToRule = !$('time-apply-line').hidden && $('edit-time-apply').checked;
 
     busy = true;
@@ -2238,7 +2390,6 @@
     if (now !== todayStr) {
       // 트래커가 '오늘'을 보고 있었다면 새 날짜로 따라감
       if (trackerWeek === DB.weekStartOf(todayStr)) trackerWeek = DB.weekStartOf(now);
-      if (routineDay === todayStr) routineDay = now;
       todayStr = now;
       renderDate();
       reloadAll().catch((err) => showError('목록을 불러오지 못했어요.', err));
@@ -2307,11 +2458,6 @@
       });
     });
     $('mission-add-form').addEventListener('submit', addMission);
-    $('routine-add-form').addEventListener('submit', addRoutine);
-    $('routine-archived-toggle').addEventListener('click', () => {
-      routineArchivedOpen = !routineArchivedOpen;
-      renderRoutines();
-    });
     $('mission-archived-toggle').addEventListener('click', () => {
       missionArchivedOpen = !missionArchivedOpen;
       renderMissions();
@@ -2320,6 +2466,20 @@
     // 백업·복원
     $('open-data').addEventListener('click', openDataSheet);
     $('data-close').addEventListener('click', closeSheet);
+    $('cat-add-form').addEventListener('submit', addCategory);
+
+    // 체크리스트 (수정창 안)
+    $('checklist-add-btn').addEventListener('click', addChecklistItem);
+    $('checklist-add-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }   // 엔터로 창 전체가 저장되지 않게
+    });
+
+    // 할 일 검색
+    $('task-search').addEventListener('input', onSearchInput);
+    $('task-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }      // 휴대폰 키보드 닫기
+    });
+    $('task-search-clear').addEventListener('click', clearSearch);
     $('data-export').addEventListener('click', async () => {
       if (busy) return;
       busy = true;
@@ -2363,7 +2523,7 @@
     });
     $('edit-skip').addEventListener('click', skipEditing);
     $('edit-stop').addEventListener('click', stopEditing);
-    document.querySelectorAll('.clear-btn').forEach((btn) => {
+    document.querySelectorAll('.clear-btn[data-clear]').forEach((btn) => {   // 날짜·시간 칸의 ✕만
       btn.addEventListener('click', () => {
         $(btn.dataset.clear).value = '';
         updateDateFields();

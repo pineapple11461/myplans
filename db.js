@@ -235,6 +235,7 @@ const DB = (function () {
       title: fields.title,
       categoryId: fields.categoryId || null,
       memo: fields.memo || '',
+      checklist: Array.isArray(fields.checklist) ? fields.checklist : [],   // [{ id, text }]
       createdAt: now,
       updatedAt: now
     };
@@ -311,6 +312,75 @@ const DB = (function () {
   // 미완료 회차 전체 (전체 할 일 화면용)
   function getPendingItems() {
     return getItemsByIndex('status', 'pending');
+  }
+
+  // 모든 회차 (검색용: 미완료·완료·건너뜀 전부)
+  async function getAllItems() {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['occurrences', 'tasks', 'rules'], 'readonly');
+      let occs = [];
+      let tasks = [];
+      let rules = [];
+      tx.oncomplete = () => {
+        const byId = {};
+        tasks.forEach((t) => { byId[t.id] = t; });
+        const activeRule = {};
+        rules.forEach((r) => { if (r.active) activeRule[r.taskId] = r; });
+        resolve(occs.filter((o) => byId[o.taskId]).map((o) => ({
+          occurrence: o, task: byId[o.taskId], rule: activeRule[o.taskId] || null
+        })));
+      };
+      tx.onerror = () => reject(tx.error);
+      const r1 = tx.objectStore('occurrences').getAll();
+      r1.onsuccess = () => { occs = r1.result; };
+      const r2 = tx.objectStore('tasks').getAll();
+      r2.onsuccess = () => { tasks = r2.result; };
+      const r3 = tx.objectStore('rules').getAll();
+      r3.onsuccess = () => { rules = r3.result; };
+    });
+  }
+
+  // ---------- 체크리스트 ----------
+  // 항목 목록은 할 일에 저장 (모든 회차가 공유: 이름을 바꾸면 지난 회차에도 적용)
+  // 체크 표시는 회차마다 따로 저장 (occurrence.checked = [항목 id, ...])
+  //   → 반복 할 일은 회차마다 빈 체크로 새로 시작
+
+  function newChecklistItemId() {
+    return 'ck-' + newId();
+  }
+
+  // 항목 목록 저장 (추가·이름 바꾸기·삭제)
+  function setChecklist(taskId, items) {
+    return run(['tasks'], 'readwrite', (tx) => {
+      const store = tx.objectStore('tasks');
+      const req = store.get(taskId);
+      req.onsuccess = () => {
+        const task = req.result;
+        if (!task) { tx.abort(); return; }
+        task.checklist = items;
+        task.updatedAt = nowISO();
+        store.put(task);
+      };
+    });
+  }
+
+  // 한 회차에서 항목 하나 체크 / 체크 해제
+  function setChecklistChecked(occurrenceId, itemId, checked) {
+    return run(['occurrences'], 'readwrite', (tx) => {
+      const store = tx.objectStore('occurrences');
+      const req = store.get(occurrenceId);
+      req.onsuccess = () => {
+        const occ = req.result;
+        if (!occ) { tx.abort(); return; }
+        const set = new Set(occ.checked || []);
+        if (checked) set.add(itemId);
+        else set.delete(itemId);
+        occ.checked = Array.from(set);
+        occ.updatedAt = nowISO();
+        store.put(occ);
+      };
+    });
   }
 
   // 달력용: 기간(start~end) 안에 예정된 회차 + 기간 안에 완료한 회차, 할 일 정보, 진행 중인 규칙
@@ -1128,6 +1198,46 @@ const DB = (function () {
     return getSetting('categories').then((list) => list || DEFAULT_CATEGORIES);
   }
 
+  // 카테고리 목록 저장 (이름 바꾸기·추가·순서 바꾸기)
+  // 할 일은 카테고리 '고유 번호'로 연결되어 있어서 이름을 바꿔도 연결이 끊기지 않음
+  function saveCategories(list) {
+    return setSetting('categories', list);
+  }
+
+  function newCategoryId() {
+    return 'cat-' + newId();
+  }
+
+  // 이 카테고리를 쓰는 할 일 개수 (삭제 확인 메시지용)
+  function countTasksInCategory(categoryId) {
+    return run(['tasks'], 'readonly', (tx) => tx.objectStore('tasks').getAll())
+      .then((list) => list.filter((t) => t.categoryId === categoryId).length);
+  }
+
+  // 카테고리 삭제: 그 카테고리의 할 일을 '없음'으로 바꾸고 목록에서 뺌
+  // 두 가지를 하나의 묶음으로 처리 → 중간에 실패하면 둘 다 취소됨
+  function deleteCategory(categoryId) {
+    return run(['tasks', 'settings'], 'readwrite', (tx) => {
+      const tasks = tx.objectStore('tasks');
+      const settings = tx.objectStore('settings');
+      const now = nowISO();
+      const tReq = tasks.getAll();
+      tReq.onsuccess = () => tReq.result.forEach((t) => {
+        if (t.categoryId === categoryId) {
+          t.categoryId = null;
+          t.updatedAt = now;
+          tasks.put(t);
+        }
+      });
+      const sReq = settings.get('categories');
+      sReq.onsuccess = () => {
+        const list = (sReq.result ? sReq.result.value : DEFAULT_CATEGORIES)
+          .filter((c) => c.id !== categoryId);
+        settings.put({ key: 'categories', value: list });
+      };
+    });
+  }
+
   // ---------- 공개 ----------
   return {
     open: open,
@@ -1137,6 +1247,10 @@ const DB = (function () {
     addQuickTask: addQuickTask,
     getItemsByDate: getItemsByDate,
     getPendingItems: getPendingItems,
+    getAllItems: getAllItems,
+    newChecklistItemId: newChecklistItemId,
+    setChecklist: setChecklist,
+    setChecklistChecked: setChecklistChecked,
     getCalendarData: getCalendarData,
     getReviewTasks: getReviewTasks,
     getItem: getItem,
@@ -1150,6 +1264,10 @@ const DB = (function () {
     getSetting: getSetting,
     setSetting: setSetting,
     getCategories: getCategories,
+    saveCategories: saveCategories,
+    newCategoryId: newCategoryId,
+    countTasksInCategory: countTasksInCategory,
+    deleteCategory: deleteCategory,
     FREQUENCIES: FREQUENCIES,
     nthDate: nthDate,
     isDateCorrection: isDateCorrection,

@@ -1456,3 +1456,72 @@ textarea.sheet-input { padding: 10px 12px; }
 .placeholder .placeholder-icon { margin: 0 auto 8px; }
 .placeholder .placeholder-icon .ic { width: 34px; height: 34px; stroke-width: 1.6; }
 
+
+/* =========================================================
+   카테고리 관리 (설정 창)
+   ========================================================= */
+.cat-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.cat-row { display: flex; align-items: center; gap: 4px; }
+.cat-row .cat-name { flex: 1; min-width: 0; height: 40px; }
+.cat-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.cat-btn:disabled { opacity: 0.3; cursor: default; }
+.cat-row .cat-del { flex: none; min-height: 32px; height: 32px; padding: 0 6px; font-size: 0.85rem; }
+
+/* =========================================================
+   체크리스트 (수정창) · 목록의 진행 표시 · 할 일 검색
+   ========================================================= */
+.checklist { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.checklist:empty { display: none; }
+.checklist-item { display: flex; align-items: center; gap: 6px; }
+.checklist-item .checklist-text { flex: 1; min-width: 0; height: 38px; }
+.checklist-item.is-done .check { background: var(--pink); }
+.checklist-item.is-done .checklist-text { color: var(--muted); text-decoration: line-through; }
+.checklist-add { margin-top: 0; }
+.checklist-add .sheet-input { height: 38px; }
+.checklist-add .btn { height: 38px; min-height: 38px; padding: 0 14px; }
+.field label .count { font-family: "Gowun Dodum", sans-serif; }
+
+/* 목록의 '☑ 2/5' */
+.ck-badge {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: #F5EEE9;
+  border-radius: 9px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+.ck-badge.is-full { background: var(--mint-soft); color: #4E9A7E; }
+.meta-done { color: #4E9A7E; }
+
+/* 검색창 */
+.search-box { position: relative; margin-bottom: 12px; }
+.search-box .search-ic {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); pointer-events: none;
+}
+.search-box .search-input {
+  width: 100%; height: 42px; padding-left: 38px; padding-right: 36px;
+  background: #fff; border-color: var(--paper-line);
+  -webkit-appearance: none; appearance: none;
+}
+.search-input::-webkit-search-cancel-button { display: none; }
+.search-box .search-clear { right: 8px; }
+
+/* 검색 중에는 필터와 세 칸을 숨기고 결과만 */
+section.is-searching .chip-row,
+section.is-searching .card:not(#search-card) { display: none; }
