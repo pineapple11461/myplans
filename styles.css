@@ -1495,16 +1495,22 @@ textarea.sheet-input { padding: 10px 12px; }
 .checklist-add .btn { height: 38px; min-height: 38px; padding: 0 14px; }
 .field label .count { font-family: "Gowun Dodum", sans-serif; }
 
-/* 목록의 '☑ 2/5' */
+/* 목록의 '☑ 2/5 ▾' 버튼 (누르면 줄 아래로 펼침) */
 .ck-badge {
+  -webkit-appearance: none;
+  appearance: none;
   flex: none;
+  border: none;
   font-size: 0.75rem;
+  line-height: 1.6;
   color: var(--muted);
   background: #F5EEE9;
   border-radius: 9px;
-  padding: 0 7px;
+  padding: 1px 8px;
   white-space: nowrap;
+  cursor: pointer;
 }
+.ck-badge.is-open { background: var(--pink-soft); color: var(--pink-dark); }
 .ck-badge.is-full { background: var(--mint-soft); color: #4E9A7E; }
 .meta-done { color: #4E9A7E; }
 
@@ -1525,3 +1531,45 @@ textarea.sheet-input { padding: 10px 12px; }
 /* 검색 중에는 필터와 세 칸을 숨기고 결과만 */
 section.is-searching .chip-row,
 section.is-searching .card:not(#search-card) { display: none; }
+
+/* 줄 아래로 펼쳐지는 체크리스트 */
+.ck-panel {
+  margin-top: 8px;
+  padding: 8px 10px 10px;
+  background: var(--bg);
+  border: 1px dashed var(--paper-line);
+  border-radius: 12px;
+  cursor: default;
+}
+/* 나타나는 효과는 처음 펼칠 때만 (체크할 때는 재생하지 않음) */
+.ck-panel.ck-anim { animation: ck-open 0.18s ease-out; }
+@keyframes ck-open { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ck-panel { animation: none; } }
+.ck-list { list-style: none; display: flex; flex-direction: column; }
+.ck-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.ck-check {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--pink);
+  background: #fff;
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+.ck-row.is-done .ck-check { background: var(--pink); }
+.ck-text { flex: 1; min-width: 0; font-size: 0.95rem; word-break: break-word; cursor: pointer; }
+.ck-row.is-done .ck-text { color: var(--muted); text-decoration: line-through; }
+.ck-add { display: flex; gap: 6px; margin-top: 6px; }
+.ck-add .sheet-input { flex: 1; min-width: 0; height: 36px; background: #fff; font-size: 0.92rem; }
+.ck-add .btn { flex: none; height: 36px; min-height: 36px; padding: 0 12px; font-size: 0.88rem; }
+/* 펼쳤을 때 할 일의 완료 동그라미는 제목 줄에 붙어 있게 */
+.task-item.ck-open { align-items: flex-start; }
+.task-item.ck-open > .check { margin-top: 0; }

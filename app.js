@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v29';
+  const APP_VERSION = 'v31';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -221,12 +221,25 @@
     title.textContent = item.task.title;   // textContent 사용: 입력한 글자가 HTML로 해석되지 않음
     main.appendChild(title);
 
-    // 체크리스트가 있으면 '2/5'처럼 이 회차의 진행 표시
+    // 체크리스트가 있으면 '2/5' 버튼: 누르면 줄 아래로 펼쳐짐 (수정창을 열지 않음)
     const ck = checklistProgress(item.task, occ);
+    const isOpen = !!ck && openChecklists.has(occ.id);
     if (ck) {
-      const badge = document.createElement('span');
-      badge.className = 'ck-badge' + (ck.done === ck.total ? ' is-full' : '');
-      badge.textContent = '☑ ' + ck.done + '/' + ck.total;
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      badge.dataset.occ = occ.id;                  // 체크할 때 이 표시만 그 자리에서 고침
+      paintBadge(badge, ck, isOpen);
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();                       // 수정창이 열리지 않게
+        if (openChecklists.has(occ.id)) {
+          openChecklists.delete(occ.id);
+        } else {
+          openChecklists.add(occ.id);
+          justOpened = occ.id;                     // 나타나는 효과는 처음 펼칠 때만
+        }
+        rerenderLists();
+        justOpened = null;
+      });
       main.appendChild(badge);
     }
     body.appendChild(main);
@@ -261,9 +274,140 @@
       if (meta.childNodes.length) body.appendChild(meta);
     }
 
+    if (isOpen) {
+      body.appendChild(checklistPanel(item));
+      li.classList.add('ck-open');               // 펼쳤을 때 완료 동그라미를 첫 줄에 맞춤
+    }
+
     li.appendChild(check);
     li.appendChild(body);
     return li;
+  }
+
+  // ---------- 줄 아래로 펼쳐지는 체크리스트 ----------
+  const openChecklists = new Set();   // 펼쳐 둔 회차 id (다시 그려도 펼친 상태 유지)
+
+  function rerenderLists() {
+    renderToday();
+    renderTasks();
+    if (searchQuery) runSearch().catch(() => {});
+  }
+
+  let justOpened = null;              // 방금 펼친 회차 id (이때만 나타나는 효과)
+
+  function paintBadge(badge, ck, isOpen) {
+    badge.className = 'ck-badge' + (ck.done === ck.total ? ' is-full' : '') + (isOpen ? ' is-open' : '');
+    badge.textContent = '☑ ' + ck.done + '/' + ck.total + (isOpen ? ' ▴' : ' ▾');
+    badge.setAttribute('aria-expanded', String(isOpen));
+    badge.setAttribute('aria-label', '체크리스트 ' + ck.done + '/' + ck.total + (isOpen ? ' 접기' : ' 펼치기'));
+  }
+
+  function paintCheckRow(row, on) {
+    row.classList.toggle('is-done', on);
+    const btn = row.querySelector('.ck-check');
+    btn.textContent = on ? '✓' : '';
+    btn.setAttribute('aria-label', row.dataset.text + (on ? ' 체크 해제' : ' 체크'));
+  }
+
+  function checklistPanel(item) {
+    const occ = item.occurrence;
+    const panel = el('div', 'ck-panel' + (justOpened === occ.id ? ' ck-anim' : ''));
+    // 펼친 부분을 눌러도 수정창이 열리지 않게
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    panel.addEventListener('keydown', (e) => e.stopPropagation());
+
+    const checked = new Set(occ.checked || []);
+    const list = el('ul', 'ck-list');
+    (item.task.checklist || []).forEach((it) => {
+      const row = el('li', 'ck-row');
+      row.dataset.occ = occ.id;
+      row.dataset.item = it.id;
+      row.dataset.text = it.text;
+      const btn = el('button', 'ck-check');
+      btn.type = 'button';
+      const text = el('span', 'ck-text', it.text);
+      // 누를 때의 '지금 상태'를 보고 반대로 바꿈 (그려 둔 때의 상태를 쓰지 않음)
+      const onTap = () => toggleInlineCheck(item, it.id, !row.classList.contains('is-done'));
+      btn.addEventListener('click', onTap);
+      text.addEventListener('click', onTap);       // 글자를 눌러도 체크
+      row.appendChild(btn);
+      row.appendChild(text);
+      paintCheckRow(row, checked.has(it.id));
+      list.appendChild(row);
+    });
+    panel.appendChild(list);
+
+    // 항목 빠르게 추가 (이름 고치기·삭제는 수정창에서)
+    const form = el('form', 'ck-add');
+    form.setAttribute('autocomplete', 'off');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'sheet-input';
+    input.placeholder = '항목 추가';
+    input.maxLength = 60;
+    input.setAttribute('enterkeyhint', 'done');
+    input.setAttribute('aria-label', '체크리스트 항목 추가');
+    const add = el('button', 'btn btn-soft', '추가');
+    add.type = 'submit';
+    form.appendChild(input);
+    form.appendChild(add);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      addInlineChecklistItem(item, input);
+    });
+    panel.appendChild(form);
+    return panel;
+  }
+
+  // 체크: 다시 그리지 않고 누른 항목과 '2/4' 표시만 그 자리에서 바꾼 뒤 순서대로 저장
+  // (같은 회차가 오늘·전체 할 일·검색 결과에 함께 있어도 모두 같이 바뀜)
+  function toggleInlineCheck(item, itemId, on) {
+    const occId = item.occurrence.id;
+    [todayItems, pendingItems, [item]].forEach((arr) => {
+      arr.forEach((it) => {
+        if (it.occurrence.id !== occId) return;
+        const set = new Set(it.occurrence.checked || []);
+        if (on) set.add(itemId);
+        else set.delete(itemId);
+        it.occurrence.checked = Array.from(set);
+      });
+    });
+
+    document.querySelectorAll('.ck-row').forEach((row) => {
+      if (row.dataset.occ === occId && row.dataset.item === itemId) paintCheckRow(row, on);
+    });
+    const ck = checklistProgress(item.task, item.occurrence);
+    document.querySelectorAll('.ck-badge').forEach((badge) => {
+      if (badge.dataset.occ === occId && ck) paintBadge(badge, ck, openChecklists.has(occId));
+    });
+
+    saveQueue = saveQueue
+      .then(() => DB.setChecklistChecked(occId, itemId, on))
+      .catch((err) => {
+        showError('체크를 저장하지 못했어요.', err);
+        return reloadAll().catch(() => {});
+      });
+  }
+
+  async function addInlineChecklistItem(item, input) {
+    const text = input.value.trim();
+    if (!text) { shake(input); return; }
+    if (busy) return;
+    busy = true;
+    try {
+      const items = (item.task.checklist || []).map((i) => ({ id: i.id, text: i.text }));
+      items.push({ id: DB.newChecklistItemId(), text: text });
+      await saveQueue;                               // 진행 중인 체크 저장이 끝난 뒤에
+      await DB.setChecklist(item.task.id, items);
+      await reloadAll();
+      // 다시 그린 뒤 같은 칸에 이어서 입력할 수 있게
+      const again = document.querySelector('.screen:not([hidden]) .ck-panel .ck-add input');
+      if (again) again.focus();
+    } catch (err) {
+      showError('항목을 추가하지 못했어요.', err);
+    } finally {
+      busy = false;
+    }
   }
 
   // ---------- 오늘 화면 그리기 ----------
@@ -1872,7 +2016,6 @@
     const input = $('quick-add-input');
     input.value = '';
     if (document.activeElement) document.activeElement.blur();   // 고치던 칸이 있으면 여기서 저장됨
-    const checklistChanged = !!(editing && editing.checklistDirty);
     $('sheet-backdrop').classList.remove('open');
     $('quick-add-sheet').classList.remove('open');
     $('edit-sheet').classList.remove('open');
@@ -1882,9 +2025,6 @@
     trackerEditing = null;
     pendingRestore = null;
     // 체크리스트를 바꿨으면 저장이 끝난 뒤 목록의 '2/5' 표시를 새로 그림
-    if (checklistChanged) {
-      saveQueue = saveQueue.then(() => reloadAll()).catch(() => {});
-    }
   }
 
   function isSheetOpen() {
@@ -2053,7 +2193,8 @@
 
   // ---------- 수정창의 체크리스트 ----------
   // 새 할 일: 항목을 모아 두었다가 '저장'할 때 함께 저장
-  // 기존 할 일: 항목 추가·고치기·삭제와 체크는 누르는 즉시 저장 (취소해도 남음)
+  // 기존 할 일도 마찬가지로 '저장'을 눌러야 반영되고, '취소'하면 바뀐 것이 모두 버려짐
+  // (줄 아래로 펼친 체크리스트는 취소 버튼이 없으므로 누르는 즉시 저장)
 
   function renderChecklist() {
     if (!editing) return;
@@ -2132,27 +2273,17 @@
   }
 
   // 기존 할 일이면 항목 목록을 바로 저장 (순서대로)
+  // 수정창에서 바꾼 체크리스트는 창 안에만 들고 있다가 '저장'을 누를 때 함께 저장 (취소하면 버림)
   function saveChecklistItems() {
-    if (!editing || editing.mode !== 'edit') return;
-    const taskId = editing.item.task.id;
-    const items = editing.checklist.map((i) => ({ id: i.id, text: i.text }));
-    editing.checklistDirty = true;
-    saveQueue = saveQueue
-      .then(() => DB.setChecklist(taskId, items))
-      .catch((err) => showError('체크리스트를 저장하지 못했어요.', err));
+    if (editing) editing.checklistChanged = true;
   }
 
   function toggleChecklistItem(it) {
     if (!editing || editing.mode !== 'edit') return;
-    const on = !editing.checked.has(it.id);
-    if (on) editing.checked.add(it.id);
-    else editing.checked.delete(it.id);
-    editing.checklistDirty = true;
+    if (editing.checked.has(it.id)) editing.checked.delete(it.id);
+    else editing.checked.add(it.id);
+    editing.checklistChanged = true;
     renderChecklist();
-    const occId = editing.item.occurrence.id;
-    saveQueue = saveQueue
-      .then(() => DB.setChecklistChecked(occId, it.id, on))
-      .catch((err) => showError('체크를 저장하지 못했어요.', err));
   }
 
   // 새 할 일 (전체 할 일 화면의 '+')
@@ -2254,11 +2385,18 @@
     }
     fields.repeat = repeat;
     fields.repeatChanged = repeatChanged;
-    if (editing.mode === 'new') {
-      // 아직 '추가'를 누르지 않고 칸에 남은 항목도 함께 넣음
-      const pending = $('checklist-add-input').value.trim();
-      if (pending) editing.checklist.push({ id: DB.newChecklistItemId(), text: pending });
+    // 체크리스트: 아직 '추가'를 누르지 않고 칸에 남은 항목도 함께 넣음
+    const pending = $('checklist-add-input').value.trim();
+    if (pending) {
+      editing.checklist.push({ id: DB.newChecklistItemId(), text: pending });
+      editing.checklistChanged = true;
+    }
+    if (editing.mode === 'new' || editing.checklistChanged) {
       fields.checklist = editing.checklist.map((i) => ({ id: i.id, text: i.text }));
+    }
+    if (editing.mode === 'edit' && editing.checklistChanged) {
+      const ids = new Set(editing.checklist.map((i) => i.id));
+      fields.checked = Array.from(editing.checked).filter((id) => ids.has(id));   // 지운 항목의 체크는 뺌
     }
     fields.applyTimeToRule = !$('time-apply-line').hidden && $('edit-time-apply').checked;
 

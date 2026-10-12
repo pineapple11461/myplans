@@ -513,6 +513,7 @@ const DB = (function () {
           task.title = fields.title;
           task.categoryId = fields.categoryId || null;
           task.memo = fields.memo || '';
+          if (Array.isArray(fields.checklist)) task.checklist = fields.checklist;   // 체크리스트 항목 (모든 회차 공통)
           task.updatedAt = now;
           taskStore.put(task);
         };
@@ -527,6 +528,7 @@ const DB = (function () {
         occ.scheduledDate = newDate;
         occ.time = newTime;
         occ.auto = false;            // 사용자가 손댄 회차 (자동 정리 대상에서 제외)
+        if (Array.isArray(fields.checked)) occ.checked = fields.checked;   // 이 회차의 체크 표시
         occ.updatedAt = now;
 
         // 3) 실제 완료일
