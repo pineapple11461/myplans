@@ -1703,3 +1703,13 @@ button.pik-row { cursor: pointer; }
 .pik-parse:empty { display: none; }
 .pik-parse .bad { color: var(--pink-dark); }
 .pik-parse ul { list-style: none; margin-top: 4px; color: var(--muted); }
+
+/* v35: 바퀴 구분 (스테이지 4 다음에 다시 스테이지 1) */
+.pik-round {
+  font-family: var(--head-font);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--pink-dark);
+  margin: 4px 4px 14px;
+}
+#pik-forecast { margin-top: 2px; }
