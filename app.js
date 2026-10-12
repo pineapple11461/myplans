@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v31';
+  const APP_VERSION = 'v32';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
@@ -337,25 +337,7 @@
     });
     panel.appendChild(list);
 
-    // 항목 빠르게 추가 (이름 고치기·삭제는 수정창에서)
-    const form = el('form', 'ck-add');
-    form.setAttribute('autocomplete', 'off');
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'sheet-input';
-    input.placeholder = '항목 추가';
-    input.maxLength = 60;
-    input.setAttribute('enterkeyhint', 'done');
-    input.setAttribute('aria-label', '체크리스트 항목 추가');
-    const add = el('button', 'btn btn-soft', '추가');
-    add.type = 'submit';
-    form.appendChild(input);
-    form.appendChild(add);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      addInlineChecklistItem(item, input);
-    });
-    panel.appendChild(form);
+    // 항목 추가·이름 고치기·삭제는 수정창에서만 (여기서는 체크만)
     return panel;
   }
 
@@ -387,27 +369,6 @@
         showError('체크를 저장하지 못했어요.', err);
         return reloadAll().catch(() => {});
       });
-  }
-
-  async function addInlineChecklistItem(item, input) {
-    const text = input.value.trim();
-    if (!text) { shake(input); return; }
-    if (busy) return;
-    busy = true;
-    try {
-      const items = (item.task.checklist || []).map((i) => ({ id: i.id, text: i.text }));
-      items.push({ id: DB.newChecklistItemId(), text: text });
-      await saveQueue;                               // 진행 중인 체크 저장이 끝난 뒤에
-      await DB.setChecklist(item.task.id, items);
-      await reloadAll();
-      // 다시 그린 뒤 같은 칸에 이어서 입력할 수 있게
-      const again = document.querySelector('.screen:not([hidden]) .ck-panel .ck-add input');
-      if (again) again.focus();
-    } catch (err) {
-      showError('항목을 추가하지 못했어요.', err);
-    } finally {
-      busy = false;
-    }
   }
 
   // ---------- 오늘 화면 그리기 ----------

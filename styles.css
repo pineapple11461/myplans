@@ -1567,9 +1567,6 @@ section.is-searching .card:not(#search-card) { display: none; }
 .ck-row.is-done .ck-check { background: var(--pink); }
 .ck-text { flex: 1; min-width: 0; font-size: 0.95rem; word-break: break-word; cursor: pointer; }
 .ck-row.is-done .ck-text { color: var(--muted); text-decoration: line-through; }
-.ck-add { display: flex; gap: 6px; margin-top: 6px; }
-.ck-add .sheet-input { flex: 1; min-width: 0; height: 36px; background: #fff; font-size: 0.92rem; }
-.ck-add .btn { flex: none; height: 36px; min-height: 36px; padding: 0 12px; font-size: 0.88rem; }
 /* 펼쳤을 때 할 일의 완료 동그라미는 제목 줄에 붙어 있게 */
 .task-item.ck-open { align-items: flex-start; }
 .task-item.ck-open > .check { margin-top: 0; }
