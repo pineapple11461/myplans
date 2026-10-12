@@ -1574,3 +1574,132 @@ section.is-searching .card:not(#search-card) { display: none; }
 /* 펼쳤을 때 할 일의 완료 동그라미는 제목 줄에 붙어 있게 */
 .task-item.ck-open { align-items: flex-start; }
 .task-item.ck-open > .check { margin-top: 0; }
+
+/* =========================================================
+   v34: 아래 메뉴 6칸 (지금 보는 탭만 이름 표시)
+   ========================================================= */
+.nav-compact .nav-btn { max-width: none; flex: 1; transition: flex 0.2s; }
+.nav-compact .nav-icon {
+  width: auto;
+  min-width: 42px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+/* 이름은 숨기되 화면 읽기 프로그램은 읽을 수 있게 */
+.nav-compact .nav-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.nav-compact .nav-btn.active { flex: 1.9; }
+.nav-compact .nav-btn.active .nav-label {
+  position: static;
+  width: auto; height: auto;
+  clip: auto;
+  overflow: visible;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--pink-dark);
+}
+
+/* =========================================================
+   v34: 피크민 이벤트 화면
+   색: 오늘 꼭(분홍) · 오늘이나 내일(흰색) · 내일 꼭(파랑) · 나중에(테두리만)
+   ========================================================= */
+:root {
+  --pk-blue: #8EC1EC;
+  --pk-blue-soft: #E1EFFB;
+  --pk-mid-bar: #D9CCBE;
+  --pk-gray: #F3EEE8;
+}
+.pik-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pik-title small { font-family: "Gowun Dodum", sans-serif; font-size: 0.8rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
+.pik-bar { height: 10px; background: var(--pk-gray); border-radius: 6px; overflow: hidden; margin: 6px 0 8px; }
+.pik-bar i { display: block; height: 100%; width: 0; background: var(--pink); border-radius: 6px; transition: width 0.3s; }
+.pik-summary { font-size: 0.88rem; color: var(--muted); }
+.pik-summary.warn { color: var(--pink-dark); }
+.pik-start { margin-top: 12px; }
+
+.pik-counter { display: flex; align-items: center; gap: 12px; }
+.pik-num { font-family: var(--head-font); font-size: 1.8rem; font-weight: 700; min-width: 26px; text-align: center; line-height: 1; }
+.pik-dots { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.pik-dots span { width: 20px; height: 20px; border-radius: 50%; border: 1.5px dashed var(--paper-line); }
+.pik-dots span.on { background: var(--pink); border: 1.5px solid var(--pink); }
+.pik-dots em { font-style: normal; font-size: 0.75rem; color: var(--pink-dark); }
+
+.pik-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: -6px 4px 18px; font-size: 0.8rem; color: var(--muted); }
+.pik-legend b { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 4px; vertical-align: -1px; }
+.pik-legend .lg-n { background: var(--pink); }
+.pik-legend .lg-mid { background: #fff; border: 1.5px solid var(--pk-mid-bar); }
+.pik-legend .lg-n1 { background: var(--pk-blue); }
+.pik-legend .lg-later { border: 1px dashed var(--paper-line); }
+
+/* 접힌 스테이지 (완료 · 아직 먼 스테이지) */
+.pik-fold {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: none; border: none; padding: 0;
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.pik-fold .card-title { margin: 0; }
+.pik-fold .pik-fold-sub { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+.pik-fold .ok { color: var(--pink-dark); font-weight: 700; }
+.pik-fold + .pik-step { margin-top: 10px; }
+
+.pik-step { margin-top: 10px; }
+.pik-step-h { font-size: 0.78rem; color: var(--muted); margin: 0 0 4px 2px; display: flex; gap: 6px; align-items: center; }
+.pik-step-h .lock { font-size: 0.72rem; background: var(--pk-gray); border-radius: 8px; padding: 0 6px; }
+
+.pik-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 5px;
+  border: none;
+  border-left: 5px solid transparent;
+  border-radius: 10px;
+  background: var(--pk-gray);
+  font: inherit; color: var(--text); text-align: left;
+}
+button.pik-row { cursor: pointer; }
+.pik-row .tx { flex: 1; font-size: 0.95rem; line-height: 1.35; min-width: 0; }
+.pik-row .tag { font-size: 0.72rem; border-radius: 8px; padding: 1px 7px; white-space: nowrap; }
+.pik-row .prog { font-size: 0.8rem; color: var(--muted); min-width: 30px; text-align: right; }
+.pik-chk {
+  width: 24px; height: 24px; flex: none;
+  border-radius: 50%; border: 1.5px solid var(--paper-line); background: #fff;
+  display: grid; place-items: center; font-size: 0.8rem; color: #fff;
+}
+.pik-chk.shroom { border-style: dashed; }
+.pik-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.pik-chips span { font-size: 0.72rem; border-radius: 8px; padding: 1px 7px; white-space: nowrap; background: #fff; border: 1px solid var(--paper-line); color: var(--muted); }
+.pik-chips .n { background: var(--pink); border-color: var(--pink); color: #fff; }
+.pik-chips .n1 { background: var(--pk-blue); border-color: var(--pk-blue); color: #fff; }
+
+.pik-row.c-n { background: var(--pink-soft); border-left-color: var(--pink); }
+.pik-row.c-n .tag { background: var(--pink); color: #fff; }
+.pik-row.c-mid { background: #fff; border-left-color: var(--pk-mid-bar); box-shadow: inset 0 0 0 1px var(--line); }
+.pik-row.c-mid .tag { background: #fff; color: var(--muted); border: 1px solid var(--pk-mid-bar); }
+.pik-row.c-n1 { background: var(--pk-blue-soft); border-left-color: var(--pk-blue); }
+.pik-row.c-n1 .tag { background: var(--pk-blue); color: #fff; }
+.pik-row.c-later { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.pik-row.c-later .tx { opacity: 0.75; }
+.pik-row.c-later .tag { background: #fff; color: var(--muted); border: 1px solid var(--paper-line); }
+.pik-row.done { background: transparent; color: var(--muted); }
+.pik-row.done .tx { text-decoration: line-through; }
+.pik-row.done .pik-chk { background: var(--pink); border-color: var(--pink); }
+
+/* 넣기·수정 창 */
+#pikmin-sheet .field-row .field { flex: 1; min-width: 0; }
+.pik-text { font-size: 0.9rem; line-height: 1.5; resize: vertical; }
+.pik-parse { margin-top: 8px; font-size: 0.85rem; color: var(--text); background: #fff; border: 1px dashed var(--paper-line); border-radius: 10px; padding: 8px 10px; }
+.pik-parse:empty { display: none; }
+.pik-parse .bad { color: var(--pink-dark); }
+.pik-parse ul { list-style: none; margin-top: 4px; color: var(--muted); }

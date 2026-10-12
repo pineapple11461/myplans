@@ -6,10 +6,10 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v33';
+  const APP_VERSION = 'v34';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-  const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
+  const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'review'];
 
   const $ = (id) => document.getElementById(id);
 
@@ -496,7 +496,7 @@
   // (먼저 반복 규칙에 따라 필요한 회차를 만들어 둠)
   async function reloadAll() {
     await DB.syncRecurrences(todayStr);
-    await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker()]);
+    await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker(), loadPikmin()]);
     if (currentScreen === 'review') await loadReview();
   }
 
@@ -1982,6 +1982,7 @@
     $('edit-sheet').classList.remove('open');
     $('tracker-sheet').classList.remove('open');
     $('data-sheet').classList.remove('open');
+    $('pikmin-sheet').classList.remove('open');
     editing = null;
     trackerEditing = null;
     pendingRestore = null;
@@ -1992,7 +1993,8 @@
     return $('quick-add-sheet').classList.contains('open') ||
       $('edit-sheet').classList.contains('open') ||
       $('tracker-sheet').classList.contains('open') ||
-      $('data-sheet').classList.contains('open');
+      $('data-sheet').classList.contains('open') ||
+      $('pikmin-sheet').classList.contains('open');
   }
 
   // '+' 버튼: 오늘 화면은 빠른 추가, 전체 할 일 화면은 상세 추가
@@ -2495,6 +2497,404 @@
     }
   }
 
+  // =========================================
+  // 피크민 이벤트 미션
+  // 저장 위치: 설정 서랍의 'pikmin' 한 칸 (백업 파일에 자동으로 함께 들어감)
+  //   { current: 이벤트 또는 null, past: [지난 이벤트...] }
+  //   이벤트 = { id, name, endDate, perDay, base, logs: { 'YYYY-MM-DD': 깬 수 }, stages, done: [미션 열쇠], createdAt }
+  //   base = 앱에 기록하기 전에 이미 깬 버섯 수
+  // 날짜 계산: 진행은 버섯으로만 바뀜. 남은 버섯을 하루 perDay개씩 깬다고 보고,
+  //   버섯이 아닌 미션은 '그 단계가 열린 날 ~ 다음 버섯을 깨기 전 날'에 하면 됨
+  // =========================================
+  let pik = { current: null, past: [] };
+  let pikSaveChain = Promise.resolve();
+  let pikFoldOpen = new Map();     // 스테이지 번호 → 펼침(true)/접힘(false). 직접 누른 것만 기억
+  let pikFoldEventId = null;
+  let pikSheetEdit = false;
+
+  async function loadPikmin() {
+    const saved = await DB.getSetting('pikmin');
+    pik = (saved && typeof saved === 'object') ? saved : { current: null, past: [] };
+    if (!Array.isArray(pik.past)) pik.past = [];
+    renderPikmin();
+  }
+
+  function savePik() {
+    const snapshot = JSON.parse(JSON.stringify(pik));
+    pikSaveChain = pikSaveChain
+      .then(() => DB.setSetting('pikmin', snapshot))
+      .catch((err) => showError('피크민 기록을 저장하지 못했어요.', err));
+    return pikSaveChain;
+  }
+
+  // 붙여 넣은 글 → 스테이지/단계/미션
+  function parsePikText(text) {
+    const stages = [];
+    let stage = null;
+    let stepNo = null;
+    String(text || '').split(/\r?\n/).forEach((raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      if (/^스테이지\s*\d*/.test(line) && !/^스테이지\s*\d+\s*[.\-]/.test(line)) {
+        stage = { steps: [] };
+        stages.push(stage);
+        stepNo = null;
+        return;
+      }
+      if (!stage) { stage = { steps: [] }; stages.push(stage); }
+      let no = stepNo === null ? '?' : stepNo;
+      let body = line;
+      const m = line.match(/^(\d+)\s*[.\-]\s*\d+\s*(.*)$/);
+      if (m) { no = m[1]; body = m[2].trim(); }
+      if (!body) return;
+      if (no !== stepNo || stage.steps.length === 0) {
+        stage.steps.push({ items: [] });
+        stepNo = no;
+      }
+      const mm = body.match(/버섯\s*([\d,]+)\s*개/);
+      const mush = mm ? parseInt(mm[1].replace(/,/g, ''), 10) || 0 : 0;
+      stage.steps[stage.steps.length - 1].items.push({ text: body, mush: mush });
+    });
+    return stages.filter((st) => st.steps.length > 0);
+  }
+
+  function pikText(ev) {
+    const lines = [];
+    ev.stages.forEach((st, si) => {
+      lines.push('스테이지 ' + (si + 1));
+      st.steps.forEach((step, pi) => {
+        step.items.forEach((it, ii) => lines.push((pi + 1) + '.' + (ii + 1) + ' ' + it.text));
+      });
+    });
+    return lines.join('\n');
+  }
+
+  const pikKey = (si, pi, text) => (si + 1) + '.' + (pi + 1) + '|' + text;
+
+  function pikCounts(ev) {
+    let total = 0;
+    ev.stages.forEach((st) => st.steps.forEach((step) => step.items.forEach((it) => { total += it.mush; })));
+    let past = 0;
+    Object.keys(ev.logs || {}).forEach((d) => { if (d < todayStr) past += ev.logs[d]; });
+    const today = (ev.logs && ev.logs[todayStr]) || 0;
+    const done = Math.min((ev.base || 0) + past + today, total);
+    return { total: total, past: past, today: today, done: done };
+  }
+
+  // 누적 u번째 버섯을 며칠 뒤에 깨게 되는지 (-1 = 이미 깸, 0 = 오늘, 1 = 내일 …)
+  function pikUnitDay(u, c, perDay) {
+    if (u <= c.done) return -1;
+    const leftToday = Math.max(0, perDay - c.today);
+    const k = u - c.done;
+    if (k <= leftToday) return 0;
+    return 1 + Math.floor((k - leftToday - 1) / perDay);
+  }
+
+  function pikDayLabel(n) {
+    if (n <= 0) return '오늘';
+    if (n === 1) return '내일';
+    const d = DB.addDays(todayStr, n);
+    return parseInt(d.slice(5, 7), 10) + '/' + parseInt(d.slice(8, 10), 10);
+  }
+  function shortDate(d) {
+    return parseInt(d.slice(5, 7), 10) + '/' + parseInt(d.slice(8, 10), 10);
+  }
+
+  // 버섯이 아닌 미션의 색: a = 할 수 있는 첫날, b = 늦어도 해야 하는 날 (0 = 오늘)
+  function pikColor(a, b) {
+    if (b <= 0) return ['c-n', '오늘 꼭'];
+    if (a <= 0) return ['c-mid', b === 1 ? '오늘·내일' : '오늘~' + pikDayLabel(b)];
+    if (a === 1 && b === 1) return ['c-n1', '내일 꼭'];
+    if (a === 1) return ['c-n1', '내일부터'];
+    return ['c-later', pikDayLabel(a) + '부터'];
+  }
+
+  function renderPikmin() {
+    const ev = pik.current;
+    $('pik-empty').hidden = !!ev;
+    $('pik-main').hidden = !ev;
+    $('pik-edit').hidden = !ev;
+    if (!ev) return;
+
+    if (pikFoldEventId !== ev.id) { pikFoldOpen = new Map(); pikFoldEventId = ev.id; }
+
+    const perDay = Math.max(1, ev.perDay || 3);
+    const c = pikCounts(ev);
+
+    // 이벤트 카드
+    $('pik-name').textContent = ev.name;
+    $('pik-end').textContent = ev.endDate ? '~ ' + shortDate(ev.endDate) : '';
+    $('pik-bar').style.width = (c.total ? (c.done / c.total * 100) : 0) + '%';
+    const sum = $('pik-summary');
+    let warn = false;
+    let text;
+    if (c.total === 0) {
+      text = '버섯 미션이 없어요';
+    } else if (c.done >= c.total) {
+      text = '버섯 ' + c.total + '개를 모두 깼어요 🎉';
+    } else {
+      const lastDay = pikUnitDay(c.total, c, perDay);
+      const finish = DB.addDays(todayStr, lastDay);
+      text = '버섯 ' + c.done + ' / ' + c.total + ' · 이대로면 ' + shortDate(finish) + '에 끝나요';
+      if (ev.endDate && finish > ev.endDate) { text += ' (마감보다 늦어요)'; warn = true; }
+    }
+    if (ev.endDate && todayStr > ev.endDate) text = '이벤트가 끝났어요 · ' + text;
+    sum.textContent = text;
+    sum.classList.toggle('warn', warn);
+
+    // 오늘 깬 버섯
+    $('pik-perday').textContent = '하루 ' + perDay + '개 기준';
+    $('pik-today').textContent = c.today;
+    $('pik-minus').disabled = c.today <= 0;
+    const dots = $('pik-dots');
+    dots.innerHTML = '';
+    for (let i = 0; i < perDay; i++) dots.appendChild(el('span', i < c.today ? 'on' : ''));
+    if (c.today > perDay) dots.appendChild(el('em', '+' + (c.today - perDay) + ' 보너스'));
+
+    // 스테이지
+    const doneSet = new Set(ev.done || []);
+    const wrap = $('pik-stages');
+    wrap.innerHTML = '';
+    let cum = 0;
+    ev.stages.forEach((stage, si) => {
+      const sStart = cum;
+      const stepEls = [];
+      let allDone = true;
+      let anySoon = false;     // 오늘·내일 색이 하나라도 있는지
+      stage.steps.forEach((step, pi) => {
+        const m = step.items.reduce((n, it) => n + it.mush, 0);
+        const b = cum;
+        const e = cum + m;
+        cum = e;
+        const unlocked = b <= c.done;
+        const a = b === 0 ? 0 : Math.max(0, pikUnitDay(b, c, perDay));
+        const last = e < c.total ? pikUnitDay(e + 1, c, perDay) : pikUnitDay(c.total, c, perDay);
+
+        const box = el('div', 'pik-step');
+        const head = el('p', 'pik-step-h', (si + 1) + '-' + (pi + 1));
+        if (!unlocked) head.appendChild(el('span', 'lock', '아직 잠김'));
+        box.appendChild(head);
+
+        let off = b;   // 같은 단계에 버섯 미션이 여러 줄이면 앞줄 다음부터 셈
+        step.items.forEach((it) => {
+          if (it.mush > 0) {
+            const from = off;
+            off += it.mush;
+            const got = Math.min(Math.max(c.done - from, 0), it.mush);
+            const row = el('div', 'pik-row');
+            const chk = el('span', 'pik-chk shroom');
+            const tx = el('span', 'tx', it.text);
+            const prog = el('span', 'prog', got + '/' + it.mush);
+            if (got >= it.mush) {
+              row.classList.add('done');
+              chk.textContent = '✓';
+            } else {
+              allDone = false;
+              const byDay = new Map();
+              for (let u = from + got + 1; u <= from + it.mush; u++) {
+                const d = pikUnitDay(u, c, perDay);
+                byDay.set(d, (byDay.get(d) || 0) + 1);
+              }
+              const days = Array.from(byDay.keys()).sort((x, y) => x - y);
+              const chips = el('div', 'pik-chips');
+              days.forEach((d) => {
+                chips.appendChild(el('span', d <= 0 ? 'n' : d === 1 ? 'n1' : '', pikDayLabel(d) + ' ' + byDay.get(d)));
+              });
+              tx.appendChild(chips);
+              const first = days[0];
+              row.classList.add(first <= 0 ? 'c-n' : first === 1 ? 'c-n1' : 'c-later');
+              if (first <= 1) anySoon = true;
+            }
+            row.append(chk, tx, prog);
+            box.appendChild(row);
+          } else {
+            const key = pikKey(si, pi, it.text);
+            const isDone = doneSet.has(key);
+            const row = el('button', 'pik-row');
+            row.type = 'button';
+            row.dataset.key = key;
+            const chk = el('span', 'pik-chk', isDone ? '✓' : '');
+            const tx = el('span', 'tx', it.text);
+            row.append(chk, tx);
+            if (isDone) {
+              row.classList.add('done');
+            } else {
+              allDone = false;
+              const col = pikColor(a, last);
+              row.classList.add(col[0]);
+              row.appendChild(el('span', 'tag', col[1]));
+              if (col[0] !== 'c-later') anySoon = true;
+            }
+            box.appendChild(row);
+          }
+        });
+        stepEls.push(box);
+      });
+
+      const card = el('div', 'card pik-stage');
+      const stageMush = cum - sStart;
+      const stageGot = Math.min(Math.max(c.done - sStart, 0), stageMush);
+      const defaultOpen = !allDone && anySoon;
+      const open = pikFoldOpen.has(si) ? pikFoldOpen.get(si) : defaultOpen;
+
+      const fold = el('button', 'pik-fold');
+      fold.type = 'button';
+      fold.dataset.fold = String(si);
+      fold.setAttribute('aria-expanded', String(open));
+      fold.appendChild(el('h2', 'card-title', '스테이지 ' + (si + 1)));
+      let subText;
+      if (allDone) subText = '✓ 완료';
+      else if (sStart > c.done) subText = '버섯 ' + stageGot + ' / ' + stageMush + ' · ' + pikDayLabel(Math.max(1, pikUnitDay(sStart, c, perDay))) + ' 열림';
+      else subText = '버섯 ' + stageGot + ' / ' + stageMush;
+      const sub = el('span', 'pik-fold-sub' + (allDone ? ' ok' : ''), subText + (open ? ' ▴' : ' ▾'));
+      fold.appendChild(sub);
+      card.appendChild(fold);
+      if (open) stepEls.forEach((x) => card.appendChild(x));
+      wrap.appendChild(card);
+    });
+  }
+
+  function onPikStagesClick(e) {
+    const fold = e.target.closest('[data-fold]');
+    if (fold) {
+      const si = parseInt(fold.dataset.fold, 10);
+      pikFoldOpen.set(si, fold.getAttribute('aria-expanded') !== 'true');
+      renderPikmin();
+      return;
+    }
+    const row = e.target.closest('[data-key]');
+    if (!row || !pik.current) return;
+    const ev = pik.current;
+    const set = new Set(ev.done || []);
+    if (set.has(row.dataset.key)) set.delete(row.dataset.key);
+    else set.add(row.dataset.key);
+    ev.done = Array.from(set);
+    renderPikmin();
+    savePik();
+  }
+
+  function changePikToday(delta) {
+    const ev = pik.current;
+    if (!ev) return;
+    if (!ev.logs) ev.logs = {};
+    const next = Math.max(0, (ev.logs[todayStr] || 0) + delta);
+    if (next === 0) delete ev.logs[todayStr];
+    else ev.logs[todayStr] = next;
+    renderPikmin();
+    savePik();
+  }
+
+  // ----- 넣기·수정 창 -----
+  function openPikSheet(edit) {
+    const ev = pik.current;
+    pikSheetEdit = !!(edit && ev);
+    hideToast();
+    if (pikSheetEdit) {
+      const c = pikCounts(ev);
+      $('pik-sheet-title').textContent = '이벤트 수정';
+      $('pik-f-name').value = ev.name;
+      $('pik-f-end').value = ev.endDate || '';
+      $('pik-f-perday').value = ev.perDay || 3;
+      $('pik-f-done').value = (ev.base || 0) + c.past;
+      $('pik-f-text').value = pikText(ev);
+    } else {
+      const y = parseInt(todayStr.slice(0, 4), 10);
+      const mo = parseInt(todayStr.slice(5, 7), 10);
+      const lastDay = new Date(y, mo, 0).getDate();
+      $('pik-sheet-title').textContent = ev ? '새 이벤트 넣기' : '이벤트 넣기';
+      $('pik-f-name').value = mo + '월 이벤트';
+      $('pik-f-end').value = todayStr.slice(0, 8) + String(lastDay).padStart(2, '0');
+      $('pik-f-perday').value = 3;
+      $('pik-f-done').value = 0;
+      $('pik-f-text').value = '';
+    }
+    $('pik-delete').hidden = !pikSheetEdit;
+    renderPikParse();
+    $('sheet-backdrop').classList.add('open');
+    $('pikmin-sheet').classList.add('open');
+    $('pikmin-sheet').scrollTop = 0;
+  }
+
+  // 붙여 넣은 글을 어떻게 나눴는지 미리 보여 줌
+  function renderPikParse() {
+    const box = $('pik-parse');
+    const text = $('pik-f-text').value;
+    if (!text.trim()) { box.innerHTML = ''; return; }
+    const stages = parsePikText(text);
+    box.innerHTML = '';
+    let items = 0;
+    let mush = 0;
+    const ul = el('ul');
+    stages.forEach((st, si) => {
+      let sm = 0;
+      let si2 = 0;
+      st.steps.forEach((step) => step.items.forEach((it) => { si2++; sm += it.mush; }));
+      items += si2;
+      mush += sm;
+      ul.appendChild(el('li', '', '스테이지 ' + (si + 1) + ': 단계 ' + st.steps.length + '개 · 미션 ' + si2 + '개 · 버섯 ' + sm + '개'));
+    });
+    if (items === 0) {
+      box.appendChild(el('span', 'bad', '미션을 찾지 못했어요.'));
+      return;
+    }
+    box.appendChild(el('strong', '', '스테이지 ' + stages.length + '개 · 미션 ' + items + '개 · 버섯 ' + mush + '개'));
+    box.appendChild(ul);
+    if (mush === 0) box.appendChild(el('p', 'bad', '버섯 미션이 없어서 날짜를 계산할 수 없어요.'));
+  }
+
+  async function submitPikSheet(e) {
+    e.preventDefault();
+    const stages = parsePikText($('pik-f-text').value);
+    if (!stages.length) { shake($('pik-f-text')); return; }
+    const name = $('pik-f-name').value.trim() || '피크민 이벤트';
+    const endDate = $('pik-f-end').value || null;
+    const perDay = Math.min(20, Math.max(1, parseInt($('pik-f-perday').value, 10) || 3));
+    const doneBefore = Math.max(0, parseInt($('pik-f-done').value, 10) || 0);
+
+    if (pikSheetEdit && pik.current) {
+      const ev = pik.current;
+      const c = pikCounts(ev);
+      ev.name = name;
+      ev.endDate = endDate;
+      ev.perDay = perDay;
+      ev.base = doneBefore - c.past;      // 어제까지 합계가 입력한 값이 되도록
+      ev.stages = stages;
+      const keys = new Set();
+      stages.forEach((st, si) => st.steps.forEach((step, pi) => step.items.forEach((it) => keys.add(pikKey(si, pi, it.text)))));
+      ev.done = (ev.done || []).filter((k) => keys.has(k));   // 지운 미션의 체크는 정리
+    } else {
+      if (pik.current) {
+        const ok = confirm('지금 보고 있는 \'' + pik.current.name + '\'은(는) 화면에서 사라지고 백업 파일에만 남아요. 새 이벤트를 넣을까요?');
+        if (!ok) return;
+        pik.past.push(pik.current);
+      }
+      pik.current = {
+        id: 'pk-' + Date.now(),
+        name: name,
+        endDate: endDate,
+        perDay: perDay,
+        base: doneBefore,
+        logs: {},
+        stages: stages,
+        done: [],
+        createdAt: new Date().toISOString()
+      };
+    }
+    closeSheet();
+    renderPikmin();
+    await savePik();
+  }
+
+  async function deletePikEvent() {
+    const ev = pik.current;
+    if (!ev) return;
+    if (!confirm('\'' + ev.name + '\' 이벤트를 지울까요? 체크한 기록과 버섯 기록도 함께 지워져요.')) return;
+    pik.current = null;
+    closeSheet();
+    renderPikmin();
+    await savePik();
+  }
+
   // ---------- 홈 화면 앱(PWA) ----------
   // 서비스 워커(sw.js) 등록: 인터넷이 되면 항상 최신 파일, 안 되면 보관한 파일로 열림
   // 실패해도 앱 사용에는 지장 없음 (그냥 일반 웹페이지처럼 동작)
@@ -2561,6 +2961,18 @@
       missionArchivedOpen = !missionArchivedOpen;
       renderMissions();
     });
+
+    // 피크민
+    $('pik-new').addEventListener('click', () => openPikSheet(false));
+    $('pik-new2').addEventListener('click', () => openPikSheet(false));
+    $('pik-edit').addEventListener('click', () => openPikSheet(true));
+    $('pik-minus').addEventListener('click', () => changePikToday(-1));
+    $('pik-plus').addEventListener('click', () => changePikToday(1));
+    $('pik-stages').addEventListener('click', onPikStagesClick);
+    $('pikmin-sheet').addEventListener('submit', submitPikSheet);
+    $('pik-cancel').addEventListener('click', closeSheet);
+    $('pik-delete').addEventListener('click', deletePikEvent);
+    $('pik-f-text').addEventListener('input', renderPikParse);
 
     // 백업·복원
     $('open-data').addEventListener('click', openDataSheet);
