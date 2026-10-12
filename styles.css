@@ -1133,11 +1133,15 @@ textarea.sheet-input { resize: vertical; line-height: 1.5; }
   --paper-line: #EADFD6;
 }
 
-/* 모눈 노트 바탕 */
-body {
+/* 모눈 노트 바탕: 화면 전체(html)에 칠함
+   (본문(body)에 칠하면 내용이 짧을 때 본문 아래로 점무늬가 끊겨 보임) */
+html {
+  min-height: 100%;
+  background-color: var(--bg);
   background-image: radial-gradient(#E9DFD3 1px, transparent 1.2px);
   background-size: 16px 16px;
 }
+body { background: transparent; }
 
 /* ----- 손글씨 제목 (작은 글씨는 읽기 쉽게 고운돋움 유지) ----- */
 .today-date,

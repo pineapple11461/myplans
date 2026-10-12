@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v32';
+  const APP_VERSION = 'v33';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'review'];
