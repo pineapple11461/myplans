@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v36';
+  const APP_VERSION = 'v38';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'review'];
@@ -606,11 +606,11 @@
       (projByDate[p.date] = projByDate[p.date] || []).push(p);
     });
 
-    // 달력 칸 (월요일 시작)
+    // 달력 칸 (일요일 시작. 트래커의 주간 기준은 그대로 월~일)
     const grid = $('cal-grid');
     grid.innerHTML = '';
     const firstDow = new Date(calYear, calMonth - 1, 1).getDay();   // 0=일
-    const blanks = (firstDow + 6) % 7;
+    const blanks = firstDow;
     for (let i = 0; i < blanks; i++) {
       const b = document.createElement('div');
       b.className = 'cal-blank';
@@ -2088,6 +2088,7 @@
       case 'daily':    text = '매일'; break;
       case 'weekly':   text = '매주 ' + wd + '요일'; break;
       case 'biweekly': text = '2주마다 ' + wd + '요일'; break;
+      case 'fourweekly': text = '4주마다 ' + wd + '요일'; break;
       case 'yearly':   text = '매년 ' + p[1] + '월 ' + p[2] + '일'; break;
       default:         text = f.label + ' ' + p[2] + '일';
     }

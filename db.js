@@ -51,6 +51,7 @@ const DB = (function () {
     daily:      { days: 1,    label: '매일',      unit: '1일' },
     weekly:     { days: 7,    label: '매주',      unit: '1주' },
     biweekly:   { days: 14,   label: '2주마다',   unit: '2주' },
+    fourweekly: { days: 28,   label: '4주마다',   unit: '4주' },
     monthly:    { months: 1,  label: '매월',      unit: '1개월' },
     quarterly:  { months: 3,  label: '3개월마다', unit: '3개월' },
     semiannual: { months: 6,  label: '6개월마다', unit: '6개월' },
