@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v44';
+  const APP_VERSION = 'v45';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'ledger', 'review'];
@@ -3492,7 +3492,7 @@
   // =========================================
   // 일기 (기록 탭의 '일기')
   // 저장 위치: 설정 서랍의 'diary' 한 칸 (백업 파일에 자동으로 함께 들어감)
-  //   { entries: { 'YYYY-MM-DD': { mood(v40~42에 고른 기분, 지금은 안 보임), text, updatedAt } } }   하루 한 편
+  //   { entries: { 'YYYY-MM-DD': { emoji(직접 고른 대표 이모지, 없으면 ''), mood(v40~42에 고른 기분, 지금은 안 보임), text, updatedAt } } }   하루 한 편
   // 쓰기 칸의 내용은 '저장'을 눌러야 남음
   // =========================================
   const MOODS = [
@@ -3529,15 +3529,16 @@
   function readDiaryDrafts() {
     try { return JSON.parse(localStorage.getItem(DIARY_DRAFT_KEY) || '{}') || {}; } catch (e) { return {}; }
   }
+  // 돌려주는 값: { text, emoji } 또는 null
   function getDiaryDraft(date) {
     const d = readDiaryDrafts()[date];
-    return d && typeof d.text === 'string' ? d.text : null;
+    return d && typeof d.text === 'string' ? { text: d.text, emoji: d.emoji || '' } : null;
   }
-  function setDiaryDraft(date, text) {
+  function setDiaryDraft(date, draft) {
     try {
       const all = readDiaryDrafts();
-      if (text === null) delete all[date];
-      else all[date] = { text: text, at: new Date().toISOString() };
+      if (draft === null) delete all[date];
+      else all[date] = { text: draft.text, emoji: draft.emoji || '', at: new Date().toISOString() };
       localStorage.setItem(DIARY_DRAFT_KEY, JSON.stringify(all));
     } catch (e) { /* 저장소를 못 쓰는 환경이면 임시 저장만 건너뜀 */ }
   }
@@ -3547,11 +3548,34 @@
     const box = diaryDraftBox;
     if (!box || !box.ta.isConnected) return;
     const text = box.ta.value;
-    setDiaryDraft(box.date, text === box.savedText || (!text.trim() && !box.savedText) ? null : text);
+    const emoji = box.em.value.trim();
+    const same = text === box.savedText && emoji === box.savedEmoji;
+    const empty = !text.trim() && !emoji && !box.savedText;
+    setDiaryDraft(box.date, same || empty ? null : { text: text, emoji: emoji });
   }
   // 앱이 뒤로 가거나 닫힐 때 바로 남김
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushDiaryDraft(); });
   window.addEventListener('pagehide', flushDiaryDraft);
+
+  // 글에서 처음 나오는 이모지 하나 (없으면 '')
+  // 🧑‍🍳 같은 합친 이모지도 한 덩어리로 다루려고, 되면 Intl.Segmenter로 글자 단위를 나눔
+  const EMOJI_RE = /\p{Extended_Pictographic}/u;
+  function firstEmoji(str) {
+    if (!str) return '';
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      const seg = new Intl.Segmenter('ko', { granularity: 'grapheme' });
+      for (const g of seg.segment(str)) {
+        if (EMOJI_RE.test(g.segment)) return g.segment;
+      }
+      return '';
+    }
+    const m = str.match(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?|[\u{1F3FB}-\u{1F3FF}])*/u);
+    return m ? m[0] : '';
+  }
+  // 일기의 대표 이모지: 직접 고른 것 → 없으면 글의 첫 이모지
+  function diaryEmoji(entry) {
+    return (entry && entry.emoji) || firstEmoji(entry ? entry.text : '');
+  }
 
   function moodIcon(id, size) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -3604,6 +3628,18 @@
     // v43: 기분 얼굴은 없앰 (이모지는 글 안에 직접 씀). 예전에 고른 기분은 저장된 그대로 둠
     diaryMood = saved ? (saved.mood || null) : null;
 
+    // 대표 이모지: 비워 두면 글의 첫 이모지가 대표 (칸 안에 흐리게 미리 보임)
+    const emRow = el('div', 'diary-emoji-row');
+    const em = document.createElement('input');
+    em.type = 'text';
+    em.className = 'sheet-input diary-emoji';
+    em.id = 'diary-emoji';
+    em.setAttribute('aria-label', '대표 이모지');
+    em.setAttribute('enterkeyhint', 'done');
+    em.value = saved && saved.emoji ? saved.emoji : '';
+    const emHint = el('span', 'diary-emoji-hint');
+    emRow.append(em, emHint);
+
     const ta = document.createElement('textarea');
     ta.className = 'sheet-input diary-text';
     ta.id = 'diary-text';
@@ -3612,11 +3648,30 @@
     ta.value = saved ? saved.text : '';
     const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 96) + 'px'; };
     ta.addEventListener('input', grow);
+    // 대표 이모지 칸 안내: 직접 넣었는지, 글에서 가져오는지
+    const paintEmoji = () => {
+      const auto = firstEmoji(ta.value);
+      em.placeholder = auto;
+      emHint.textContent = em.value
+        ? '대표 이모지 (지우면 글의 첫 이모지)'
+        : auto ? '대표 이모지 · 글의 첫 이모지예요' : '대표 이모지 · 비워 두면 글의 첫 이모지';
+    };
+    ta.addEventListener('input', paintEmoji);
+    em.addEventListener('input', (e) => {
+      if (e.isComposing) return;
+      const one = firstEmoji(em.value);           // 이모지 하나만 남김 (글자는 들어가지 않음)
+      if (em.value !== one) em.value = one;
+      paintEmoji();
+      clearTimeout(diaryDraftTimer);
+      diaryDraftTimer = setTimeout(flushDiaryDraft, 800);
+    });
+    em.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); em.blur(); } });
 
     // 임시 저장: 저장 안 한 글이 남아 있으면 불러오고, 쓰는 동안 계속 임시로 남겨 둠
     const draft = getDiaryDraft(date);
-    if (draft !== null && draft !== ta.value) {
-      ta.value = draft;
+    if (draft !== null && (draft.text !== ta.value || draft.emoji !== em.value)) {
+      ta.value = draft.text;
+      em.value = draft.emoji;
       const note = el('div', 'diary-draft-note');
       note.appendChild(el('span', '', '저장 안 한 글을 불러왔어요'));
       const drop = el('button', 'diary-draft-drop', '임시 글 버리기');
@@ -3630,7 +3685,9 @@
       note.appendChild(drop);
       card.appendChild(note);
     }
-    diaryDraftBox = { date: date, ta: ta, savedText: saved ? saved.text : '' };
+    diaryDraftBox = { date: date, ta: ta, em: em, savedText: saved ? saved.text : '', savedEmoji: saved && saved.emoji ? saved.emoji : '' };
+    paintEmoji();
+    card.appendChild(emRow);
     ta.addEventListener('input', () => {
       clearTimeout(diaryDraftTimer);
       diaryDraftTimer = setTimeout(flushDiaryDraft, 800);
@@ -3648,7 +3705,7 @@
     row.appendChild(el('span', 'spacer'));
     const save = el('button', 'btn btn-primary', '저장');
     save.type = 'button';
-    save.addEventListener('click', () => submitDiary(date, ta));
+    save.addEventListener('click', () => submitDiary(date, ta, em));
     row.appendChild(save);
     card.appendChild(row);
     return card;
@@ -3674,6 +3731,8 @@
       side.setAttribute('aria-label', diaryDateLabel(d) + ' 일기 고치기');
       side.appendChild(el('b', '', String(+d.slice(8, 10))));
       side.appendChild(el('small', '', '일월화수목금토'[new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay()]));
+      const rep = diaryEmoji(e);
+      if (rep) side.appendChild(el('span', 'diary-rep', rep));
       side.addEventListener('click', () => editDiaryDate(d));
       const body = el('div', 'diary-body');
       const p = el('p', 'diary-p' + (diaryOpen.has(d) ? '' : ' clip'), e.text || '(내용 없음)');
@@ -3710,10 +3769,11 @@
       .catch((err) => showError('기록을 불러오지 못했어요.', err));
   }
 
-  async function submitDiary(date, ta) {
+  async function submitDiary(date, ta, em) {
     const text = ta.value.replace(/\s+$/, '');
     if (!text.trim()) { shake(ta); return; }
-    diary.entries[date] = { mood: diaryMood, text: text, updatedAt: new Date().toISOString() };
+    // emoji: 직접 고른 대표 이모지만 저장 (비워 두면 볼 때마다 글의 첫 이모지를 씀)
+    diary.entries[date] = { mood: diaryMood, emoji: firstEmoji(em.value), text: text, updatedAt: new Date().toISOString() };
     clearTimeout(diaryDraftTimer);
     diaryDraftBox = null;
     setDiaryDraft(date, null);          // 저장했으니 임시 글은 지움

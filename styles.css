@@ -1826,3 +1826,10 @@ button.pik-row { cursor: pointer; }
 /* v44: 일기 임시 저장 안내 */
 .diary-draft-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 0; font-size: 0.8rem; color: #8A6A0E; background: #FFF1C2; border-radius: 10px; padding: 6px 10px; }
 .diary-draft-drop { background: none; border: none; padding: 0; font: inherit; font-size: 0.8rem; color: var(--pink-dark); text-decoration: underline; cursor: pointer; white-space: nowrap; }
+
+/* v45: 일기 대표 이모지 */
+.diary-emoji-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.diary-emoji { flex: none; width: 52px; height: 48px; padding: 0; text-align: center; font-size: 1.6rem; line-height: 1; }
+.diary-emoji::placeholder { opacity: 0.45; }
+.diary-emoji-hint { font-size: 0.8rem; color: var(--muted); }
+.diary-rep { font-size: 1.35rem; line-height: 1; margin-top: 4px; }
