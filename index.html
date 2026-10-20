@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=38">
+  <link rel="stylesheet" href="styles.css?v=39">
 </head>
 <body>
 
@@ -39,7 +39,8 @@
       <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4c3-1.5 5.5 1.5 8 0s4.5-1 6 0v9c-1.5-1-3.5-1.5-6 0s-5-1.5-8 0"/></symbol>
       <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v2M12 3v2"/></symbol>
       <symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21c0-9 5-15 15-16-1 10-7 15-15 16z"/><path d="M5 21 13 12"/></symbol>
-      <symbol id="i-search"viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M21 9h-5a3 3 0 0 0 0 6h5z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M14 17H4"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></symbol>
     </defs>
   </svg>
@@ -285,6 +286,43 @@
       </div>
     </section>
 
+    <!-- ========== 가계부 ========== -->
+    <section class="screen" data-screen="ledger" hidden>
+      <header class="screen-header today-header">
+        <h1 class="screen-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic" width="22" height="22"><use href="#i-wallet"/></svg></span>가계부</h1>
+        <button type="button" class="settings-btn" id="lg-open-settings" aria-label="가계부 설정"><svg class="ic" width="22" height="22"><use href="#i-sliders"/></svg></button>
+      </header>
+
+      <div class="card week-nav">
+        <button type="button" class="cal-nav" id="lg-prev" aria-label="이전 달">‹</button>
+        <div class="week-label"><strong id="lg-month-title"></strong></div>
+        <button type="button" class="cal-nav" id="lg-next" aria-label="다음 달">›</button>
+        <button type="button" class="cal-today-btn" id="lg-this">이번 달</button>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title pik-title"><span>한 달 합계</span><small id="lg-sum-range"></small></h2>
+        <div class="lg-sum">
+          <div class="lg-out"><p>지출</p><strong id="lg-total-out">0</strong></div>
+          <div class="lg-in"><p>수입</p><strong id="lg-total-in">0</strong></div>
+        </div>
+        <p class="lg-save-line" id="lg-save-line" hidden></p>
+        <div class="lg-cats" id="lg-cats"></div>
+      </div>
+
+      <div class="card" id="lg-cards-card" hidden>
+        <h2 class="card-title pik-title">카드 실적<small>이 달 이용분</small></h2>
+        <div id="lg-cards"></div>
+        <div id="lg-fees"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title pik-title">내역<small id="lg-count"></small></h2>
+        <div id="lg-list"></div>
+        <p class="empty" id="lg-empty" hidden>이 달에 적은 내역이 없어요. + 버튼으로 적어 보세요</p>
+      </div>
+    </section>
+
     <!-- ========== 5. 리뷰 및 기록 ========== -->
     <section class="screen" data-screen="review" hidden>
       <header class="screen-header">
@@ -499,6 +537,90 @@
     </div>
   </form>
 
+  <!-- 가계부 내역 적기·고치기 창 -->
+  <form class="sheet sheet-tall" id="ledger-sheet" autocomplete="off" novalidate>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 class="sheet-label" id="lg-sheet-title">내역 적기</h2>
+    <div class="field">
+      <div class="seg" role="radiogroup" aria-label="종류">
+        <label class="seg-item"><input type="radio" name="lg-type" value="out" checked><span>지출</span></label>
+        <label class="seg-item"><input type="radio" name="lg-type" value="in"><span>수입</span></label>
+        <label class="seg-item"><input type="radio" name="lg-type" value="save"><span>저축·상환</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <label for="lg-f-amount">금액 (원)</label>
+      <input type="text" id="lg-f-amount" class="sheet-input lg-amount" inputmode="numeric" maxlength="15" placeholder="0" enterkeyhint="done">
+    </div>
+    <div class="field">
+      <label>분류</label>
+      <div class="lg-chip-wrap" id="lg-f-cats" role="group" aria-label="분류"></div>
+    </div>
+    <div class="field" id="lg-f-method-field">
+      <label for="lg-f-method">결제수단</label>
+      <select id="lg-f-method" class="sheet-input"></select>
+    </div>
+    <div class="field">
+      <label for="lg-f-date">날짜</label>
+      <input type="date" id="lg-f-date" class="sheet-input">
+    </div>
+    <div class="field">
+      <label for="lg-f-memo">메모</label>
+      <input type="text" id="lg-f-memo" class="sheet-input" maxlength="60" placeholder="예: 회사 앞 김밥" enterkeyhint="done">
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-danger" id="lg-delete" hidden>삭제</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost" id="lg-cancel">취소</button>
+      <button type="submit" class="btn btn-primary">저장</button>
+    </div>
+  </form>
+
+  <!-- 가계부 설정: 카드 · 결제수단 · 분류 -->
+  <div class="sheet sheet-tall" id="ledger-settings-sheet" role="dialog" aria-labelledby="lg-settings-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 class="sheet-label" id="lg-settings-title"><span class="ic-wrap t-pink" aria-hidden="true"><svg class="ic" width="22" height="22"><use href="#i-sliders"/></svg></span>가계부 설정</h2>
+
+    <div class="data-block">
+      <h3 class="data-title">카드</h3>
+      <p class="field-hint">실적 목표와 연회비를 적어 두면 가계부 화면에 이 달 실적과 연회비 청구 달이 나와요. 카드를 추가하면 같은 이름의 결제수단도 함께 생겨요.</p>
+      <div id="lg-card-list"></div>
+      <form class="inline-add" id="lg-card-add" autocomplete="off">
+        <input type="text" id="lg-card-add-input" class="sheet-input" placeholder="새 카드 이름" maxlength="20" enterkeyhint="done">
+        <button type="submit" class="btn btn-primary">추가</button>
+      </form>
+    </div>
+
+    <div class="data-block">
+      <h3 class="data-title">결제수단</h3>
+      <p class="field-hint">'네이버페이 · 신한'처럼 페이와 카드를 묶어 두고 연결 카드를 고르면, 그 결제수단으로 쓴 돈이 카드 실적에 더해져요.</p>
+      <ul class="cat-list" id="lg-method-list"></ul>
+      <form class="inline-add" id="lg-method-add" autocomplete="off">
+        <input type="text" id="lg-method-add-input" class="sheet-input" placeholder="예: 네이버페이 · 신한" maxlength="24" enterkeyhint="done">
+        <button type="submit" class="btn btn-primary">추가</button>
+      </form>
+    </div>
+
+    <div class="data-block">
+      <h3 class="data-title">분류</h3>
+      <div class="seg-tabs lg-cat-tabs" id="lg-cat-tabs" role="tablist" aria-label="분류 종류">
+        <button type="button" class="seg-tab active" data-type="out" role="tab">지출</button>
+        <button type="button" class="seg-tab" data-type="in" role="tab">수입</button>
+        <button type="button" class="seg-tab" data-type="save" role="tab">저축·상환</button>
+      </div>
+      <p class="field-hint">분류를 지우면 그 분류로 적은 내역은 '미분류'로 남아요.</p>
+      <ul class="cat-list" id="lg-cat-list"></ul>
+      <form class="inline-add" id="lg-cat-add" autocomplete="off">
+        <input type="text" id="lg-cat-add-input" class="sheet-input" placeholder="새 분류" maxlength="12" enterkeyhint="done">
+        <button type="submit" class="btn btn-primary">추가</button>
+      </form>
+    </div>
+
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-ghost" id="lg-settings-close">닫기</button>
+    </div>
+  </div>
+
   <!-- 데이터 백업·복원: 아래에서 올라오는 창 -->
   <div class="sheet sheet-tall" id="data-sheet" role="dialog" aria-labelledby="data-sheet-title">
     <div class="sheet-handle" aria-hidden="true"></div>
@@ -574,12 +696,15 @@
     <button type="button" class="nav-btn" data-target="pikmin">
       <span class="nav-icon"><svg class="ic" width="22" height="22"><use href="#i-leaf"/></svg><span class="nav-label">피크민</span></span>
     </button>
+    <button type="button" class="nav-btn" data-target="ledger">
+      <span class="nav-icon"><svg class="ic" width="22" height="22"><use href="#i-wallet"/></svg><span class="nav-label">가계부</span></span>
+    </button>
     <button type="button" class="nav-btn" data-target="review">
       <span class="nav-icon"><svg class="ic" width="22" height="22"><use href="#i-book"/></svg><span class="nav-label">기록</span></span>
     </button>
   </nav>
 
-  <script src="db.js?v=38" defer></script>
-  <script src="app.js?v=38" defer></script>
+  <script src="db.js?v=39" defer></script>
+  <script src="app.js?v=39" defer></script>
 </body>
 </html>
