@@ -1713,3 +1713,71 @@ button.pik-row { cursor: pointer; }
   margin: 4px 4px 14px;
 }
 #pik-forecast { margin-top: 2px; }
+
+/* =========================================================
+   v39: 가계부
+   ========================================================= */
+/* 아래 메뉴 7칸: 아이콘 칸을 조금 좁게 */
+.nav-compact .nav-icon { min-width: 38px; padding: 0 8px; }
+.nav-compact .nav-btn.active .nav-label { white-space: nowrap; }
+
+.lg-sum { display: flex; gap: 10px; }
+.lg-sum > div { flex: 1; background: var(--pk-gray); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.lg-sum p { font-size: 0.78rem; color: var(--muted); }
+.lg-sum strong { font-family: var(--head-font); font-size: 1.45rem; display: block; overflow-wrap: anywhere; }
+.lg-out strong { color: var(--pink-dark); }
+.lg-in strong { color: #4E9C7E; }
+.lg-save-line { margin-top: 8px; font-size: 0.85rem; color: #8466C6; background: #F3EEFB; border-radius: 10px; padding: 6px 10px; }
+.lg-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.lg-cats:empty { display: none; }
+.lg-cats span { font-size: 0.78rem; background: #fff; border: 1px solid var(--paper-line); border-radius: 10px; padding: 2px 8px; }
+.lg-cats i { font-style: normal; color: var(--muted); margin-left: 4px; }
+
+.lg-cardrow { margin-top: 8px; }
+.lg-cardrow .h { display: flex; justify-content: space-between; gap: 8px; font-size: 0.92rem; }
+.lg-cardrow .h span:last-child { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+.lg-cardrow .bar { height: 9px; background: var(--pk-gray); border-radius: 6px; overflow: hidden; margin: 5px 0 2px; }
+.lg-cardrow .bar i { display: block; height: 100%; background: var(--pink); border-radius: 6px; }
+.lg-cardrow.ok .bar i { background: #A9DCC8; }
+.lg-cardrow .s { font-size: 0.78rem; color: var(--muted); }
+.lg-cardrow.ok .s { color: #4E9C7E; font-weight: 700; }
+.lg-fee { margin-top: 10px; font-size: 0.82rem; background: #FFF1C2; color: #8A6A0E; border-radius: 10px; padding: 6px 10px; }
+
+.lg-day { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin: 12px 2px 2px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.lg-day:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.lg-tx {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 7px 0;
+  background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.lg-badge { min-width: 34px; height: 30px; padding: 0 4px; border-radius: 10px; display: grid; place-items: center; font-size: 0.7rem; font-weight: 700; flex: none; white-space: nowrap; }
+.lg-b0 { background: var(--pink-soft); color: var(--pink-dark); }
+.lg-b1 { background: #FFF1C2; color: #A3790F; }
+.lg-b2 { background: #EAF6F0; color: #4E9C7E; }
+.lg-b3 { background: #EDE7FA; color: #8466C6; }
+.lg-b4 { background: #E1EFFB; color: #4F86B8; }
+.lg-tx .m { flex: 1; min-width: 0; }
+.lg-tx .m b { display: block; font-weight: 400; font-size: 0.98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-tx .m span { font-size: 0.75rem; color: var(--muted); }
+.lg-tx .a { font-size: 0.98rem; white-space: nowrap; }
+.lg-tx .a.in { color: #4E9C7E; }
+.lg-tx .a.save { color: #8466C6; }
+
+/* 적기 창 */
+.lg-amount { font-family: var(--head-font); font-size: 1.5rem; font-weight: 700; text-align: right; }
+.lg-chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.lg-chip-wrap .chip { padding: 5px 12px; }
+
+/* 설정 창: 카드 */
+.lg-card-box { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 8px; background: #fff; }
+.lg-card-box .cat-row { margin-bottom: 8px; }
+.lg-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.lg-card-grid label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 2px; }
+.lg-card-grid .sheet-input { height: 38px; padding: 6px 10px; width: 100%; }
+.lg-method-card { flex: none; width: 116px; height: 40px; padding: 4px 6px; font-size: 0.85rem; }
+.lg-cat-tabs { margin-bottom: 8px; }
+/* 결제수단 줄: 이름은 한 줄 전체, 연결 카드·버튼은 아래 줄 */
+#lg-method-list .cat-row { flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px dashed var(--line); }
+#lg-method-list .cat-row:last-child { border-bottom: none; }
+#lg-method-list .cat-name { flex: 1 1 100%; }
+#lg-method-list .lg-method-card { flex: 1; width: auto; }
