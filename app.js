@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v40';
+  const APP_VERSION = 'v41';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'ledger', 'review'];
@@ -47,7 +47,7 @@
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
   // 리뷰 화면
-  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions' | 'diary'
+  let reviewTab = 'diary';                         // 'tasks' | 'goals' | 'habits' | 'missions' | 'diary'
   let reviewYear = new Date().getFullYear();
   let reviewMonth = new Date().getMonth() + 1;     // 1~12
   let reviewLoadId = 0;                            // 빠르게 탭·달을 바꿀 때 늦게 온 결과 무시
@@ -172,7 +172,8 @@
 
     // 리뷰 화면은 열 때마다 최신 기록을 다시 읽음 (트래커에서 고친 내용 반영)
     if (name === 'review') {
-      diaryDate = null;          // 기록 탭을 새로 열면 일기 쓰기 칸은 오늘
+      reviewTab = 'diary';       // 기록 탭을 열면 항상 '일기'부터
+      diaryDate = null;          // 일기 쓰기 칸은 오늘
       diaryMood = null;
       loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
     }
