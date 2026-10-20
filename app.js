@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v43';
+  const APP_VERSION = 'v44';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'ledger', 'review'];
@@ -3519,6 +3519,40 @@
     return diarySaveChain;
   }
 
+  // ----- 임시 저장 (저장 버튼을 누르기 전의 글) -----
+  // 휴대폰이 앱을 갑자기 꺼도 남도록, 바로 기록되는 브라우저 저장소(localStorage)에 날짜별로 둠.
+  // 이 기기에만 남는 임시 글이라 백업 파일에는 들어가지 않음
+  const DIARY_DRAFT_KEY = 'oneul-diary-drafts';
+  let diaryDraftBox = null;          // 지금 화면의 쓰기 칸 { date, ta, savedText }
+  let diaryDraftTimer = null;
+
+  function readDiaryDrafts() {
+    try { return JSON.parse(localStorage.getItem(DIARY_DRAFT_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function getDiaryDraft(date) {
+    const d = readDiaryDrafts()[date];
+    return d && typeof d.text === 'string' ? d.text : null;
+  }
+  function setDiaryDraft(date, text) {
+    try {
+      const all = readDiaryDrafts();
+      if (text === null) delete all[date];
+      else all[date] = { text: text, at: new Date().toISOString() };
+      localStorage.setItem(DIARY_DRAFT_KEY, JSON.stringify(all));
+    } catch (e) { /* 저장소를 못 쓰는 환경이면 임시 저장만 건너뜀 */ }
+  }
+  // 쓰기 칸의 글을 임시로 남김 (저장된 글과 같으면 임시 글 지움)
+  function flushDiaryDraft() {
+    clearTimeout(diaryDraftTimer);
+    const box = diaryDraftBox;
+    if (!box || !box.ta.isConnected) return;
+    const text = box.ta.value;
+    setDiaryDraft(box.date, text === box.savedText || (!text.trim() && !box.savedText) ? null : text);
+  }
+  // 앱이 뒤로 가거나 닫힐 때 바로 남김
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushDiaryDraft(); });
+  window.addEventListener('pagehide', flushDiaryDraft);
+
   function moodIcon(id, size) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'mood-ic mood-c' + id);
@@ -3538,6 +3572,7 @@
 
   // 기록 탭 '일기'에 들어갈 카드 2장: 쓰기 칸 + 이 달의 일기
   async function renderDiaryCards() {
+    flushDiaryDraft();                 // 화면을 다시 그리기 전에 쓰던 글을 남겨 둠
     if (!diary) await loadDiary();
     const date = diaryDate || todayStr;
     const saved = diary.entries[date];
@@ -3573,10 +3608,33 @@
     ta.className = 'sheet-input diary-text';
     ta.id = 'diary-text';
     ta.rows = 4;
-    ta.placeholder = '예: 🦷 치과 진료 / 🚌 버스 놓침';
+    ta.placeholder = '오늘 있었던 일을 적어 보세요';
     ta.value = saved ? saved.text : '';
     const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 96) + 'px'; };
     ta.addEventListener('input', grow);
+
+    // 임시 저장: 저장 안 한 글이 남아 있으면 불러오고, 쓰는 동안 계속 임시로 남겨 둠
+    const draft = getDiaryDraft(date);
+    if (draft !== null && draft !== ta.value) {
+      ta.value = draft;
+      const note = el('div', 'diary-draft-note');
+      note.appendChild(el('span', '', '저장 안 한 글을 불러왔어요'));
+      const drop = el('button', 'diary-draft-drop', '임시 글 버리기');
+      drop.type = 'button';
+      drop.addEventListener('click', () => {
+        clearTimeout(diaryDraftTimer);
+        diaryDraftBox = null;
+        setDiaryDraft(date, null);
+        loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
+      });
+      note.appendChild(drop);
+      card.appendChild(note);
+    }
+    diaryDraftBox = { date: date, ta: ta, savedText: saved ? saved.text : '' };
+    ta.addEventListener('input', () => {
+      clearTimeout(diaryDraftTimer);
+      diaryDraftTimer = setTimeout(flushDiaryDraft, 800);
+    });
     setTimeout(grow, 0);
     card.appendChild(ta);
 
@@ -3656,6 +3714,9 @@
     const text = ta.value.replace(/\s+$/, '');
     if (!text.trim()) { shake(ta); return; }
     diary.entries[date] = { mood: diaryMood, text: text, updatedAt: new Date().toISOString() };
+    clearTimeout(diaryDraftTimer);
+    diaryDraftBox = null;
+    setDiaryDraft(date, null);          // 저장했으니 임시 글은 지움
     // 다른 달 날짜에 썼으면 그 달 목록으로 이동
     reviewYear = +date.slice(0, 4);
     reviewMonth = +date.slice(5, 7);
@@ -3669,6 +3730,8 @@
     if (!old) return;
     if (!confirm(diaryDateLabel(date) + ' 일기를 지울까요?')) return;
     delete diary.entries[date];
+    diaryDraftBox = null;
+    setDiaryDraft(date, null);
     diaryMood = null;
     await saveDiary();
     await loadReview();

@@ -1822,3 +1822,7 @@ button.pik-row { cursor: pointer; }
 .diary-p { font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
 .diary-p.clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .diary-more { background: none; border: none; padding: 2px 0; font: inherit; font-size: 0.8rem; color: var(--pink-dark); cursor: pointer; }
+
+/* v44: 일기 임시 저장 안내 */
+.diary-draft-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 0; font-size: 0.8rem; color: #8A6A0E; background: #FFF1C2; border-radius: 10px; padding: 6px 10px; }
+.diary-draft-drop { background: none; border: none; padding: 0; font: inherit; font-size: 0.8rem; color: var(--pink-dark); text-decoration: underline; cursor: pointer; white-space: nowrap; }
