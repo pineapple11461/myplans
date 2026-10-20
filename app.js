@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v42';
+  const APP_VERSION = 'v43';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'ledger', 'review'];
@@ -3492,7 +3492,7 @@
   // =========================================
   // 일기 (기록 탭의 '일기')
   // 저장 위치: 설정 서랍의 'diary' 한 칸 (백업 파일에 자동으로 함께 들어감)
-  //   { entries: { 'YYYY-MM-DD': { mood: 1~5 또는 null, text, updatedAt } } }   하루 한 편
+  //   { entries: { 'YYYY-MM-DD': { mood(v40~42에 고른 기분, 지금은 안 보임), text, updatedAt } } }   하루 한 편
   // 쓰기 칸의 내용은 '저장'을 눌러야 남음
   // =========================================
   const MOODS = [
@@ -3566,33 +3566,14 @@
     head.appendChild(pickWrap);
     card.appendChild(head);
 
-    if (diaryMood === null && saved) diaryMood = saved.mood || null;
-    const moods = el('div', 'diary-moods');
-    moods.setAttribute('role', 'group');
-    moods.setAttribute('aria-label', '오늘 기분');
-    MOODS.forEach((m) => {
-      const b = el('button', 'diary-mood' + (diaryMood === m.id ? ' on' : ''));
-      b.type = 'button';
-      b.setAttribute('aria-label', m.name);
-      b.setAttribute('aria-pressed', String(diaryMood === m.id));
-      b.appendChild(moodIcon(m.id, 30));
-      b.addEventListener('click', () => {
-        diaryMood = diaryMood === m.id ? null : m.id;     // 한 번 더 누르면 해제
-        moods.querySelectorAll('.diary-mood').forEach((x, i) => {
-          const on = MOODS[i].id === diaryMood;
-          x.classList.toggle('on', on);
-          x.setAttribute('aria-pressed', String(on));
-        });
-      });
-      moods.appendChild(b);
-    });
-    card.appendChild(moods);
+    // v43: 기분 얼굴은 없앰 (이모지는 글 안에 직접 씀). 예전에 고른 기분은 저장된 그대로 둠
+    diaryMood = saved ? (saved.mood || null) : null;
 
     const ta = document.createElement('textarea');
     ta.className = 'sheet-input diary-text';
     ta.id = 'diary-text';
     ta.rows = 4;
-    ta.placeholder = '오늘 있었던 일을 적어 보세요';
+    ta.placeholder = '예: 🦷 치과 진료 / 🚌 버스 놓침';
     ta.value = saved ? saved.text : '';
     const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 96) + 'px'; };
     ta.addEventListener('input', grow);
@@ -3635,10 +3616,9 @@
       side.setAttribute('aria-label', diaryDateLabel(d) + ' 일기 고치기');
       side.appendChild(el('b', '', String(+d.slice(8, 10))));
       side.appendChild(el('small', '', '일월화수목금토'[new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay()]));
-      if (e.mood) side.appendChild(moodIcon(e.mood, 26));
       side.addEventListener('click', () => editDiaryDate(d));
       const body = el('div', 'diary-body');
-      const p = el('p', 'diary-p' + (diaryOpen.has(d) ? '' : ' clip'), e.text || '(기분만 남긴 날)');
+      const p = el('p', 'diary-p' + (diaryOpen.has(d) ? '' : ' clip'), e.text || '(내용 없음)');
       body.appendChild(p);
       const more = el('button', 'diary-more', diaryOpen.has(d) ? '접기' : '더 보기');
       more.type = 'button';
@@ -3674,7 +3654,7 @@
 
   async function submitDiary(date, ta) {
     const text = ta.value.replace(/\s+$/, '');
-    if (!text.trim() && !diaryMood) { shake(ta); return; }
+    if (!text.trim()) { shake(ta); return; }
     diary.entries[date] = { mood: diaryMood, text: text, updatedAt: new Date().toISOString() };
     // 다른 달 날짜에 썼으면 그 달 목록으로 이동
     reviewYear = +date.slice(0, 4);
