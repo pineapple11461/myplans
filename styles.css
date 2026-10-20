@@ -1781,3 +1781,44 @@ button.pik-row { cursor: pointer; }
 #lg-method-list .cat-row:last-child { border-bottom: none; }
 #lg-method-list .cat-name { flex: 1 1 100%; }
 #lg-method-list .lg-method-card { flex: 1; width: auto; }
+
+/* =========================================================
+   v40: 일기 (기록 탭)
+   ========================================================= */
+#review-tabs .seg-tab { font-size: 0.84rem; }
+.mood-ic { display: block; }
+.mood-c1 { color: #E07D96; }
+.mood-c2 { color: #E8A93C; }
+.mood-c3 { color: #8EB9A6; }
+.mood-c4 { color: #7FA7D6; }
+.mood-c5 { color: #A08F84; }
+
+.diary-date { position: relative; font-family: "Gowun Dodum", sans-serif; font-size: 0.82rem; font-weight: 400; color: var(--pink-dark); white-space: nowrap; cursor: pointer; }
+.diary-date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; cursor: pointer; }
+.diary-moods { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+.diary-mood {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; max-width: 52px; aspect-ratio: 1;
+  border-radius: 50%; border: 1.5px solid var(--paper-line); background: #fff;
+  display: grid; place-items: center; padding: 0; cursor: pointer;
+}
+.diary-mood.on { border-color: var(--pink); background: var(--pink-soft); box-shadow: 0 2px 0 #F3C7D2; }
+.diary-text { width: 100%; min-height: 96px; line-height: 1.6; resize: none; overflow: hidden; }
+.diary-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+.diary-entry { display: flex; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--line); }
+.diary-list .card-title + .diary-entry { border-top: none; padding-top: 2px; }
+.diary-day {
+  -webkit-appearance: none; appearance: none;
+  flex: none; width: 44px; background: none; border: none; padding: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.diary-day b { font-family: var(--head-font); font-size: 1.5rem; line-height: 1; }
+.diary-day small { font-size: 0.72rem; color: var(--muted); }
+.diary-day .mood-ic { margin-top: 3px; }
+.diary-entry.is-editing .diary-day b { color: var(--pink-dark); }
+.diary-body { flex: 1; min-width: 0; }
+.diary-p { font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
+.diary-p.clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.diary-more { background: none; border: none; padding: 2px 0; font: inherit; font-size: 0.8rem; color: var(--pink-dark); cursor: pointer; }

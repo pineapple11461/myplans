@@ -6,7 +6,7 @@
 (function () {
 
   // 앱 버전: 업데이트할 때마다 index.html의 ?v= 숫자와 함께 올림 (오늘 화면 맨 아래에 표시)
-  const APP_VERSION = 'v39';
+  const APP_VERSION = 'v40';
 
   const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const SCREENS = ['today', 'tasks', 'calendar', 'tracker', 'pikmin', 'ledger', 'review'];
@@ -47,7 +47,7 @@
   let saveQueue = Promise.resolve();   // 칸을 빠르게 연달아 눌러도 순서대로 저장
 
   // 리뷰 화면
-  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions'
+  let reviewTab = 'tasks';                         // 'tasks' | 'goals' | 'habits' | 'missions' | 'diary'
   let reviewYear = new Date().getFullYear();
   let reviewMonth = new Date().getMonth() + 1;     // 1~12
   let reviewLoadId = 0;                            // 빠르게 탭·달을 바꿀 때 늦게 온 결과 무시
@@ -172,6 +172,8 @@
 
     // 리뷰 화면은 열 때마다 최신 기록을 다시 읽음 (트래커에서 고친 내용 반영)
     if (name === 'review') {
+      diaryDate = null;          // 기록 탭을 새로 열면 일기 쓰기 칸은 오늘
+      diaryMood = null;
       loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
     }
 
@@ -496,7 +498,7 @@
   // (먼저 반복 규칙에 따라 필요한 회차를 만들어 둠)
   async function reloadAll() {
     await DB.syncRecurrences(todayStr);
-    await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker(), loadPikmin(), loadLedger()]);
+    await Promise.all([loadToday(), loadTasks(), loadCalendar(), loadTracker(), loadPikmin(), loadLedger(), loadDiary()]);
     if (currentScreen === 'review') await loadReview();
   }
 
@@ -1351,7 +1353,7 @@
   // 기록 종류별로 나눠서 보여 줌. 할 일 기록은 수정창에서, 트래커 기록은 트래커 화면에서 고침
   // (고치는 곳을 한 군데로 두어 다른 종류의 기록에 영향이 가지 않게 함)
 
-  const REVIEW_NAMES = { tasks: '할 일', goals: '주간 목표', habits: '습관', missions: '미션' };
+  const REVIEW_NAMES = { tasks: '할 일', goals: '주간 목표', habits: '습관', missions: '미션', diary: '일기' };
 
   function monthRangeOf(y, m) {
     const last = new Date(y, m, 0).getDate();
@@ -1385,6 +1387,7 @@
     $('review-title').textContent = reviewYear + '년 ' + reviewMonth + '월';
     $('review-sub').textContent = reviewTab === 'tasks'
       ? '완료하거나 건너뛴 할 일'
+      : reviewTab === 'diary' ? '하루 한 편'
       : REVIEW_NAMES[reviewTab] + ' · 월요일 기준 주별 기록';
     const thisMonth = isThisMonth(reviewYear, reviewMonth);
     $('review-this').hidden = thisMonth;
@@ -1405,6 +1408,9 @@
       const items = await DB.getReviewTasks(r.start, r.end);
       if (myId !== reviewLoadId) return;
       cards = renderReviewTasks(items);
+    } else if (reviewTab === 'diary') {
+      cards = await renderDiaryCards();
+      if (myId !== reviewLoadId) return;
     } else {
       const weeks = weeksInMonth(reviewYear, reviewMonth);
       const data = await Promise.all(weeks.map((w) => loadWeekRecords(w)));
@@ -1603,6 +1609,8 @@
 
   function moveReviewMonth(delta) {
     if (delta === 0) {
+      diaryDate = null;          // 일기 쓰기 칸도 오늘로
+      diaryMood = null;
       const t = todayStr.split('-').map(Number);
       reviewYear = t[0];
       reviewMonth = t[1];
@@ -3478,6 +3486,217 @@
     input.value = '';
     renderLgCatList();
     lgAfterSettingChange();
+  }
+
+  // =========================================
+  // 일기 (기록 탭의 '일기')
+  // 저장 위치: 설정 서랍의 'diary' 한 칸 (백업 파일에 자동으로 함께 들어감)
+  //   { entries: { 'YYYY-MM-DD': { mood: 1~5 또는 null, text, updatedAt } } }   하루 한 편
+  // 쓰기 칸의 내용은 '저장'을 눌러야 남음
+  // =========================================
+  const MOODS = [
+    { id: 1, name: '아주 좋음' }, { id: 2, name: '좋음' }, { id: 3, name: '그저 그럼' },
+    { id: 4, name: '슬픔' }, { id: 5, name: '화남' }
+  ];
+  let diary = null;
+  let diarySaveChain = Promise.resolve();
+  let diaryDate = null;              // 쓰기 칸의 날짜 (null이면 오늘)
+  let diaryMood = null;              // 쓰기 칸에서 고른 기분
+  let diaryOpen = new Set();         // '더 보기'로 펼친 날짜
+
+  async function loadDiary() {
+    const saved = await DB.getSetting('diary');
+    diary = (saved && typeof saved === 'object' && saved.entries && typeof saved.entries === 'object')
+      ? saved : { entries: {} };
+  }
+
+  function saveDiary() {
+    const snapshot = JSON.parse(JSON.stringify(diary));
+    diarySaveChain = diarySaveChain
+      .then(() => DB.setSetting('diary', snapshot))
+      .catch((err) => showError('일기를 저장하지 못했어요.', err));
+    return diarySaveChain;
+  }
+
+  function moodIcon(id, size) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'mood-ic mood-c' + id);
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', '#i-mood' + id);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  function diaryDateLabel(d) {
+    const wd = '일월화수목금토'[new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay()];
+    return (+d.slice(5, 7)) + '월 ' + (+d.slice(8, 10)) + '일 (' + wd + ')';
+  }
+
+  // 기록 탭 '일기'에 들어갈 카드 2장: 쓰기 칸 + 이 달의 일기
+  async function renderDiaryCards() {
+    if (!diary) await loadDiary();
+    const date = diaryDate || todayStr;
+    const saved = diary.entries[date];
+    return [diaryWriteCard(date, saved), diaryListCard()];
+  }
+
+  function diaryWriteCard(date, saved) {
+    const card = el('div', 'card diary-write');
+    const head = el('h2', 'card-title pik-title');
+    head.appendChild(el('span', '', date === todayStr ? '오늘의 일기' : (+date.slice(5, 7)) + '월 ' + (+date.slice(8, 10)) + '일 일기'));
+    // 날짜 고르기: 글자 위에 투명한 날짜 칸을 겹쳐서, 누르면 휴대폰 달력이 열림
+    const pickWrap = el('label', 'diary-date');
+    pickWrap.appendChild(el('span', '', diaryDateLabel(date) + ' ▾'));
+    const pick = document.createElement('input');
+    pick.type = 'date';
+    pick.value = date;
+    pick.max = todayStr;
+    pick.setAttribute('aria-label', '일기 날짜 고르기');
+    pick.addEventListener('change', () => {
+      if (!pick.value) return;
+      diaryDate = pick.value > todayStr ? todayStr : pick.value;
+      diaryMood = null;
+      loadReview().catch((err) => showError('기록을 불러오지 못했어요.', err));
+    });
+    pickWrap.appendChild(pick);
+    head.appendChild(pickWrap);
+    card.appendChild(head);
+
+    if (diaryMood === null && saved) diaryMood = saved.mood || null;
+    const moods = el('div', 'diary-moods');
+    moods.setAttribute('role', 'group');
+    moods.setAttribute('aria-label', '오늘 기분');
+    MOODS.forEach((m) => {
+      const b = el('button', 'diary-mood' + (diaryMood === m.id ? ' on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-label', m.name);
+      b.setAttribute('aria-pressed', String(diaryMood === m.id));
+      b.appendChild(moodIcon(m.id, 30));
+      b.addEventListener('click', () => {
+        diaryMood = diaryMood === m.id ? null : m.id;     // 한 번 더 누르면 해제
+        moods.querySelectorAll('.diary-mood').forEach((x, i) => {
+          const on = MOODS[i].id === diaryMood;
+          x.classList.toggle('on', on);
+          x.setAttribute('aria-pressed', String(on));
+        });
+      });
+      moods.appendChild(b);
+    });
+    card.appendChild(moods);
+
+    const ta = document.createElement('textarea');
+    ta.className = 'sheet-input diary-text';
+    ta.id = 'diary-text';
+    ta.rows = 4;
+    ta.placeholder = '오늘 있었던 일을 적어 보세요';
+    ta.value = saved ? saved.text : '';
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 96) + 'px'; };
+    ta.addEventListener('input', grow);
+    setTimeout(grow, 0);
+    card.appendChild(ta);
+
+    const row = el('div', 'diary-actions');
+    if (saved) {
+      const del = el('button', 'btn btn-danger', '지우기');
+      del.type = 'button';
+      del.addEventListener('click', () => deleteDiary(date));
+      row.appendChild(del);
+    }
+    row.appendChild(el('span', 'spacer'));
+    const save = el('button', 'btn btn-primary', '저장');
+    save.type = 'button';
+    save.addEventListener('click', () => submitDiary(date, ta));
+    row.appendChild(save);
+    card.appendChild(row);
+    return card;
+  }
+
+  function diaryListCard() {
+    const prefix = reviewYear + '-' + pad2(reviewMonth) + '-';
+    const dates = Object.keys(diary.entries).filter((d) => d.startsWith(prefix)).sort().reverse();
+    const card = el('div', 'card diary-list');
+    const head = el('h2', 'card-title pik-title');
+    head.appendChild(el('span', '', reviewMonth + '월의 일기'));
+    head.appendChild(el('small', '', dates.length ? dates.length + '편' : ''));
+    card.appendChild(head);
+    if (!dates.length) {
+      card.appendChild(el('p', 'empty', '이 달에 쓴 일기가 없어요'));
+      return card;
+    }
+    dates.forEach((d) => {
+      const e = diary.entries[d];
+      const row = el('div', 'diary-entry' + (d === (diaryDate || todayStr) ? ' is-editing' : ''));
+      const side = el('button', 'diary-day');
+      side.type = 'button';
+      side.setAttribute('aria-label', diaryDateLabel(d) + ' 일기 고치기');
+      side.appendChild(el('b', '', String(+d.slice(8, 10))));
+      side.appendChild(el('small', '', '일월화수목금토'[new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay()]));
+      if (e.mood) side.appendChild(moodIcon(e.mood, 26));
+      side.addEventListener('click', () => editDiaryDate(d));
+      const body = el('div', 'diary-body');
+      const p = el('p', 'diary-p' + (diaryOpen.has(d) ? '' : ' clip'), e.text || '(기분만 남긴 날)');
+      body.appendChild(p);
+      const more = el('button', 'diary-more', diaryOpen.has(d) ? '접기' : '더 보기');
+      more.type = 'button';
+      more.hidden = true;
+      more.addEventListener('click', () => {
+        if (diaryOpen.has(d)) diaryOpen.delete(d); else diaryOpen.add(d);
+        const open = diaryOpen.has(d);
+        p.classList.toggle('clip', !open);
+        more.textContent = open ? '접기' : '더 보기';
+      });
+      body.appendChild(more);
+      // 3줄을 넘는 일기에만 '더 보기' 표시 (화면에 그려진 뒤에 높이를 재야 알 수 있음)
+      requestAnimationFrame(() => {
+        if (diaryOpen.has(d) || p.scrollHeight > p.clientHeight + 2) more.hidden = false;
+      });
+      p.addEventListener('click', () => editDiaryDate(d));
+      row.append(side, body);
+      card.appendChild(row);
+    });
+    return card;
+  }
+
+  function editDiaryDate(d) {
+    diaryDate = d === todayStr ? null : d;
+    diaryMood = null;
+    loadReview()
+      .then(() => {
+        const box = document.querySelector('.diary-write');
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      })
+      .catch((err) => showError('기록을 불러오지 못했어요.', err));
+  }
+
+  async function submitDiary(date, ta) {
+    const text = ta.value.replace(/\s+$/, '');
+    if (!text.trim() && !diaryMood) { shake(ta); return; }
+    diary.entries[date] = { mood: diaryMood, text: text, updatedAt: new Date().toISOString() };
+    // 다른 달 날짜에 썼으면 그 달 목록으로 이동
+    reviewYear = +date.slice(0, 4);
+    reviewMonth = +date.slice(5, 7);
+    await saveDiary();
+    await loadReview();
+    showToast('일기를 저장했어요');
+  }
+
+  async function deleteDiary(date) {
+    const old = diary.entries[date];
+    if (!old) return;
+    if (!confirm(diaryDateLabel(date) + ' 일기를 지울까요?')) return;
+    delete diary.entries[date];
+    diaryMood = null;
+    await saveDiary();
+    await loadReview();
+    showToast('일기를 지웠어요', '되돌리기', async () => {
+      diary.entries[date] = old;
+      diaryMood = null;
+      await saveDiary();
+      await loadReview();
+    });
   }
 
   // ---------- 홈 화면 앱(PWA) ----------

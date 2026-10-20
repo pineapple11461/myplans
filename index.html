@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
   <!-- ?v=숫자: 파일을 수정할 때마다 숫자를 올리면 휴대폰이 예전 파일 대신 새 파일을 받아옴 -->
-  <link rel="stylesheet" href="styles.css?v=39">
+  <link rel="stylesheet" href="styles.css?v=40">
 </head>
 <body>
 
@@ -40,6 +40,12 @@
       <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v2M12 3v2"/></symbol>
       <symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21c0-9 5-15 15-16-1 10-7 15-15 16z"/><path d="M5 21 13 12"/></symbol>
       <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M21 9h-5a3 3 0 0 0 0 6h5z"/></symbol>
+      <!-- 일기 기분 얼굴 5개 (1 아주 좋음 · 2 좋음 · 3 그저 그럼 · 4 슬픔 · 5 화남) -->
+      <symbol id="i-mood1" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#FDE3EA" stroke="currentColor" stroke-width="2"/><path d="M10 13.5q1.5-2 3 0M19 13.5q1.5-2 3 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.5 18.5q5.5 6 11 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8.5" cy="18" r="1.6" fill="#F7B9C8"/><circle cx="23.5" cy="18" r="1.6" fill="#F7B9C8"/></symbol>
+      <symbol id="i-mood2" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#FFF1C2" stroke="currentColor" stroke-width="2"/><circle cx="11.5" cy="14" r="1.4" fill="currentColor"/><circle cx="20.5" cy="14" r="1.4" fill="currentColor"/><path d="M11.5 19.5q4.5 3.5 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-mood3" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#EAF6F0" stroke="currentColor" stroke-width="2"/><circle cx="11.5" cy="14" r="1.4" fill="currentColor"/><circle cx="20.5" cy="14" r="1.4" fill="currentColor"/><path d="M12 20h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-mood4" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#E1EFFB" stroke="currentColor" stroke-width="2"/><path d="M10 14q1.5 1.5 3 0M19 14q1.5 1.5 3 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 21.5q4-3 8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M22.5 17.5q1.2 2 0 3q-1.2-1 0-3z" fill="#9CC9F0"/></symbol>
+      <symbol id="i-mood5" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#F3EEE8" stroke="currentColor" stroke-width="2"/><path d="M9.5 12.5l3.5 1.5M22.5 12.5L19 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="11.5" cy="16" r="1.3" fill="currentColor"/><circle cx="20.5" cy="16" r="1.3" fill="currentColor"/><path d="M12 22q4-2.5 8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M14 17H4"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></symbol>
     </defs>
@@ -335,6 +341,7 @@
         <button type="button" class="seg-tab" data-tab="goals" role="tab">목표</button>
         <button type="button" class="seg-tab" data-tab="habits" role="tab">습관</button>
         <button type="button" class="seg-tab" data-tab="missions" role="tab">미션</button>
+        <button type="button" class="seg-tab" data-tab="diary" role="tab">일기</button>
       </div>
 
       <!-- 월 이동 -->
@@ -704,7 +711,7 @@
     </button>
   </nav>
 
-  <script src="db.js?v=39" defer></script>
-  <script src="app.js?v=39" defer></script>
+  <script src="db.js?v=40" defer></script>
+  <script src="app.js?v=40" defer></script>
 </body>
 </html>
